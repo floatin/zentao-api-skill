@@ -271,7 +271,13 @@ def cmd_create_story(client: ZenTaoClient, product_id: str, execution_id: str,
         print("❌ 操作已取消")
         return
     
-    success, result = client.create_story(product_id, execution_id, title, plan_id, reviewer)
+    success, result = client.create_story(
+        product_id=product_id,
+        title=title,
+        execution_id=execution_id,
+        plan=plan_id,
+        reviewer=reviewer,
+    )
     
     if success:
         msg = result.get('message', '新建成功') if isinstance(result, dict) else '新建成功'

@@ -346,46 +346,10 @@ class ZenTaoClient:
         return False, {}
 
     # ==================== 写操作方法（需要确认）====================
-
-    def create_story(
-        self,
-        product_id: str,
-        execution_id: str,
-        title: str,
-        module: str = "0",
-        plan_id: str = "0",
-        branch: str = "0",
-        reviewer: str = "",
-    ) -> Tuple[bool, Dict]:
-        """新建需求（老 API）
-
-        Args:
-            product_id: 产品ID
-            execution_id: 执行/项目ID
-            title: 需求标题
-            module: 模块ID，默认 "0"
-            plan_id: 计划ID，默认 "0"
-            branch: 分支ID，默认 "0"
-            reviewer: 评审人，默认为空
-
-        Returns:
-            (success, result)
-        """
-        post_data = {
-            "product": product_id,
-            "module": module,
-            "modules[0]": module,
-            "plans[0]": plan_id,
-            "title": title,
-            "plan": plan_id,
-            "reviewer[]": reviewer or "xuzn",
-        }
-        # URL: /story-create-{product}-{module}-{story}-{plan}-{execution}-{branch}-{module}-{type}.json
-        return self.old_request(
-            "POST",
-            f"/story-create-{product_id}-{module}-0-{plan_id}-{execution_id}-{branch}-{module}-0-story.json",
-            post_data,
-        )
+    # ponytail: the live create_story lives further down (line ~1800) with the
+    # generalised (product_id, title, **kwargs) signature. The earlier
+    # positional form was overwritten by Python's last-defines-wins rule and
+    # is now dead code — kept here as a marker.
 
     def create_subtasks(
         self,

@@ -59,3 +59,22 @@ def test_create_story_accepts_kwargs_and_routes(client):
     assert captured["method"] == "POST"
     assert "21" in captured["path"]  # product_id shows up in URL
     assert captured["data"]["title"] == "登录流程"
+
+
+def test_cli_create_story_uses_known_signature():
+    """Regression: cli.py's cmd_create_story used to call
+    ``client.create_story(product_id, execution_id, title, plan_id, reviewer)``
+    which under the new (product_id, title, ...) signature would silently
+    swap title and execution_id. The CLI must pass title in the title slot."""
+    import inspect
+    from zentao_api import cli
+
+    src = inspect.getsource(cli.cmd_create_story)
+    # title must be in the call, and execution_id must NOT be the 2nd positional.
+    assert "title=title" in src or "title=" in src, (
+        "cli.cmd_create_story must pass title to create_story"
+    )
+    # The old broken call pattern must be gone.
+    assert "create_story(product_id, execution_id, title" not in src, (
+        "cli.cmd_create_story still uses the old positional ordering"
+    )
