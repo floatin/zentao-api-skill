@@ -9,19 +9,7 @@ import re
 from pathlib import Path
 from datetime import datetime
 
-# 添加 lib 目录到 Python 路径
-script_dir = Path(__file__).parent.absolute()
-lib_path = script_dir.parent / 'lib'
-sys.path.insert(0, str(lib_path))
-
-# 直接导入
-import importlib.util
-client_path = lib_path / "zentao_client.py"
-spec = importlib.util.spec_from_file_location("zentao_client", client_path)
-zentao_client = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(zentao_client)
-ZenTaoClient = zentao_client.ZenTaoClient
-read_credentials = zentao_client.read_credentials
+from zentao_api.client import ZenTaoClient, read_credentials
 
 
 def format_table(headers: list, rows: list, max_width: int = 30) -> str:

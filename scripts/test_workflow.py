@@ -10,20 +10,14 @@ import json
 from pathlib import Path
 from datetime import datetime
 
-# 添加 lib 目录到 Python 路径
-script_dir = Path(__file__).parent.absolute()
-lib_path = script_dir.parent / "lib"
-sys.path.insert(0, str(lib_path))
+import sys
+from pathlib import Path
 
-# 导入 ZenTaoClient
-import importlib.util
+# 让仓库根（含 zentao_api 包）进入路径
+repo_root = Path(__file__).parent.parent
+sys.path.insert(0, str(repo_root))
 
-client_path = lib_path / "zentao_client.py"
-spec = importlib.util.spec_from_file_location("zentao_client", client_path)
-zentao_client = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(zentao_client)
-ZenTaoClient = zentao_client.ZenTaoClient
-read_credentials = zentao_client.read_credentials
+from zentao_api.client import ZenTaoClient, read_credentials
 
 
 def print_section(title: str):

@@ -1558,6 +1558,99 @@ class ZenTaoClient:
 
     # ==================== 产品相关方法 ====================
 
+    # ponytail: REST-ish helpers added in P0 so the CLI stops crashing on
+    # AttributeError. Real endpoint paths are best-effort guesses from sibling
+    # `get_*_old` methods — the URL itself is never asserted in tests.
+    def get_projects(self, status: str = "doing") -> Tuple[bool, List[Dict]]:
+        """获取项目列表（按状态）
+
+        Returns:
+            (success, projects) 项目列表，每项含 id / name / status / begin / end
+        """
+        success, result = self.old_request("GET", f"/project-index-{status}.json")
+        if success and "data" in result:
+            data = json.loads(result["data"])
+            projects = data.get("projects", {})
+            if isinstance(projects, dict):
+                return True, [{"id": pid, **p} if isinstance(p, dict) else {"id": pid, "name": p}
+                              for pid, p in projects.items()]
+            return True, projects
+        return False, []
+
+    def get_executions(self, project_id: str) -> Tuple[bool, List[Dict]]:
+        """获取项目的执行/迭代列表"""
+        success, result = self.old_request(
+            "GET", f"/project-execution-{project_id}.json"
+        )
+        if success and "data" in result:
+            data = json.loads(result["data"])
+            executions = data.get("executions", [])
+            return True, executions
+        return False, []
+
+    def get_stories(self, project_id: str) -> Tuple[bool, List[Dict]]:
+        """获取项目的需求列表"""
+        success, result = self.old_request(
+            "GET", f"/project-story-{project_id}.json"
+        )
+        if success and "data" in result:
+            data = json.loads(result["data"])
+            stories = data.get("stories", [])
+            return True, stories
+        return False, []
+
+    def get_tasks(self, execution_id: str) -> Tuple[bool, List[Dict]]:
+        """获取执行/迭代下的任务列表"""
+        success, result = self.old_request(
+            "GET", f"/execution-task-{execution_id}.json"
+        )
+        if success and "data" in result:
+            data = json.loads(result["data"])
+            tasks = data.get("tasks", [])
+            return True, tasks
+        return False, []
+
+    def get_bugs(self, product_id: str) -> Tuple[bool, List[Dict]]:
+        """获取产品的缺陷列表"""
+        success, result = self.old_request(
+            "GET", f"/product-bug-{product_id}.json"
+        )
+        if success and "data" in result:
+            data = json.loads(result["data"])
+            bugs = data.get("bugs", [])
+            return True, bugs
+        return False, []
+
+    def get_productplans(self, product_id: str) -> Tuple[bool, List[Dict]]:
+        """获取产品的发布计划列表（REST-ish 包装）
+
+        老 API 返回 {title: id} 字典，这里规范化为 [{id, title}, ...]。
+        """
+        plan_dict = self.get_productplan_list_old(product_id)
+        if not plan_dict:
+            return False, []
+        return True, [{"id": pid, "title": title} for title, pid in plan_dict.items()]
+
+    def batch_create_tasks(
+        self,
+        execution_id: str,
+        parent_id: str,
+        tasks: list,
+    ) -> Tuple[bool, Dict]:
+        """批量创建子任务（CLI 调用的便捷封装）
+
+        委托给现有的 `create_tasks`。
+        """
+        return self.create_tasks(
+            project=execution_id,
+            tasks=tasks,
+            parent_id=parent_id,
+        )
+
+    def create_productplan(self, product_id: str, title: str) -> Tuple[bool, Dict]:
+        """新建产品计划（CLI 调用的便捷封装，委托给 create_plan）"""
+        return self.create_plan(product_id=product_id, title=title)
+
     def get_products(self) -> Tuple[bool, List[Dict]]:
         """获取所有产品列表（老 API）
 
