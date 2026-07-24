@@ -12,21 +12,35 @@
 
 ## 安装
 
+推荐用 [pipx](https://pypa.github.io/pipx/) 全局安装 CLI 工具——它会为每个工具建独立虚拟环境，但命令暴露到 `$PATH`，不污染项目依赖。
+
 ```bash
-pip install ys-zentao-api
+# 首次使用先装 pipx
+brew install pipx          # macOS
+apt install pipx           # Debian/Ubuntu
+pipx ensurepath            # 把 ~/.local/bin 加到 PATH
+
+# 装 ys-zentao-api（命令 zentao 可用）
+pipx install ys-zentao-api
+
+# 试用不装：直接跑最新版的命令
+pipx run --spec ys-zentao-api zentao --help
 ```
 
-或从源码：
+需要 Python 3.8+。
+
+### 从源码开发
 
 ```bash
 git clone <repo>
 cd ys-zentao-api
+pipx install -e .          # 可编辑装到全局
+# 或者
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e .
+pytest tests/ -v
 ```
-
-`zentao` 命令会注册到 `$PATH`。
-
-要求 Python 3.8+。
 
 ## 配置
 
