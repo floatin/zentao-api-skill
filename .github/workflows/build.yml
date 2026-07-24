@@ -50,10 +50,11 @@ jobs:
             --jobs=$(nproc 2>/dev/null || echo 2) \
             --output-filename=zentao-cli \
             zentao_api/cli.py
-          # Tar up the standalone directory for distribution
-          cd cli.dist
-          tar czf ../zentao-cli-${{ runner.os }}-${{ runner.arch }}.tar.gz zentao-cli
-          cd ..
+          # Package the whole cli.dist/ — the binary needs Python framework
+          # and .so siblings alongside it. Archive layout: zentao-cli/bin/zentao-cli.
+          mkdir -p staging
+          cp -R cli.dist staging/zentao-cli
+          tar czf zentao-cli-${{ runner.os }}-${{ runner.arch }}.tar.gz -C staging zentao-cli
           ls -la zentao-cli-${{ runner.os }}-${{ runner.arch }}.tar.gz
 
       - name: Setup MSVC env (Windows)
@@ -80,23 +81,26 @@ jobs:
         shell: pwsh
         run: |
           python -m nuitka --standalone --disable-ccache --mingw-mode --output-filename=zentao-cli zentao_api/cli.py
-          Compress-Archive -Path cli.dist/zentao-cli -DestinationPath zentao-cli-windows-x86_64.zip -Force
+          # Same as POSIX: copy cli.dist\ into a zentao-cli\ folder before zipping.
+          New-Item -ItemType Directory -Force -Path staging | Out-Null
+          Copy-Item -Recurse -Force cli.dist staging/zentao-cli
+          Compress-Archive -Path staging/zentao-cli -DestinationPath zentao-cli-windows-x86_64.zip -Force
           Get-Item zentao-cli-windows-x86_64.zip
 
       - name: Smoke test (POSIX)
         if: matrix.os != 'windows-latest'
         run: |
-          ./cli.dist/zentao-cli --help
+          ./staging/zentao-cli/bin/zentao-cli --help
           echo "---"
-          ./cli.dist/zentao-cli 2>&1 | head -5 || true
+          ./staging/zentao-cli/bin/zentao-cli 2>&1 | head -5 || true
 
       - name: Smoke test (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          .\cli.dist\zentao-cli.exe --help
+          .\staging\zentao-cli\bin\zentao-cli.exe --help
           Write-Host "---"
-          .\cli.dist\zentao-cli.exe 2>&1 | Select-Object -First 5
+          .\staging\zentao-cli\bin\zentao-cli.exe 2>&1 | Select-Object -First 5
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
