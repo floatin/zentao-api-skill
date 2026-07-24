@@ -64,25 +64,32 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          # Download a portable MinGW-w64 from niXman's GitHub releases.
-          # ~30s, no admin needed, no choco friction. Architecture: x86_64,
-          # threads: posix (Python extension compatible), exception: seh.
-          $mingwUrl = "https://github.com/niXman/mingw-builds-binaries/releases/download/13.2.0-rt_v11-rev1/x86_64-13.2.0-release-posix-seh-ucrt-rt_v11-rev1.7z"
+          # Download portable MinGW-w64 as a .zip (Expand-Archive friendly).
+          # winlibs.com GCC 16.1, ~260 MB. Cached at $env:RUNNER_TEMP between steps.
+          $mingwUrl = "https://github.com/brechtsanders/winlibs_mingw/releases/download/16.1.0posix-14.0.0-ucrt-r3/winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64ucrt-14.0.0-r3.zip"
           $mingwDir = "C:\mingw64"
+          $zipPath = "$env:RUNNER_TEMP\mingw.zip"
           if (-not (Test-Path $mingwDir)) {
             Write-Host "Downloading MinGW from $mingwUrl"
-            $zipPath = "$env:TEMP\mingw.zip"
+            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
             Invoke-WebRequest -Uri $mingwUrl -OutFile $zipPath -UseBasicParsing
-            Write-Host "Downloaded $([math]::Round((Get-Item $zipPath).Length / 1MB, 1)) MB"
-            # Extract using tar (Windows 10+ ships tar.exe)
-            New-Item -ItemType Directory -Path $mingwDir -Force | Out-Null
-            tar -xzf $zipPath -C $mingwDir
+            $sizeMb = [math]::Round((Get-Item $zipPath).Length / 1MB, 1)
+            Write-Host "Downloaded $sizeMb MB"
+            Write-Host "Extracting..."
+            Expand-Archive -Path $zipPath -DestinationPath $mingwDir -Force
+            # winlibs zip extracts into a subdirectory like "mingw64"
+            $inner = Get-ChildItem $mingwDir -Directory | Select-Object -First 1
+            if ($inner -and (Test-Path "$($inner.FullName)\bin\gcc.exe")) {
+              Write-Host "Moving $($inner.Name) -> mingw64"
+              Move-Item "$($inner.FullName)\*" $mingwDir -Force
+              Remove-Item $inner.FullName -Recurse -Force
+            }
             Remove-Item $zipPath
           }
           $gcc = Get-ChildItem "$mingwDir\bin\gcc.exe" -ErrorAction SilentlyContinue
           if (-not $gcc) {
-            Get-ChildItem $mingwDir
-            Write-Host "FATAL: gcc not found in $mingwDir"
+            Get-ChildItem "$mingwDir" | Select-Object -First 10
+            Write-Host "FATAL: gcc not found"
             exit 1
           }
           Write-Host "gcc found: $($gcc.FullName)"
