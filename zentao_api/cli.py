@@ -4,9 +4,11 @@
 
 import argparse
 import sys
+from pathlib import Path
 from typing import Callable, Dict, Tuple
 
 from zentao_api.client import ZenTaoClient, read_credentials
+from zentao_api.client._credentials import default_env_path
 
 
 # ---------- display helpers --------------------------------------------------
@@ -87,7 +89,6 @@ def cmd_projects(client, args):
         fallback=lambda: [{"id": pid, "name": n}
                           for pid, n in (client.get_project_list_old() or {}).items()],
     )
-
 
 def cmd_executions(client, args):
     success, executions = client.get_executions(args.project_id)
@@ -274,6 +275,12 @@ COMMANDS: Dict[str, Callable[[ZenTaoClient, argparse.Namespace], None]] = {
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="zentao", description="禅道项目管理工具")
+    p.add_argument(
+        "--env-file",
+        type=Path,
+        default=None,
+        help=f".env 凭证文件路径，默认 {default_env_path()}",
+    )
     sub = p.add_subparsers(dest="command", required=True)
 
     sub.add_parser("products", help="查询产品列表")
@@ -330,14 +337,19 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv=None) -> int:
-    credentials = read_credentials()
+    # Parse first so --help never reaches the credential check.
+    parser = build_parser()
+    args = parser.parse_args(argv if argv is not None else sys.argv[1:])
+
+    env_path = args.env_file if args.env_file is not None else default_env_path()
+    credentials = read_credentials(env_path)
     if not credentials:
-        print("\n❌ 错误：未找到禅道 API 凭证")
-        print("\n请在 TOOLS.md 文件中添加以下配置：\n")
-        print("## 禅道 API")
-        print("- **API 地址：** http://<your-zentao-host>/")
-        print("- **用户名：** <your-username>")
-        print("- **密码：** <your-password>")
+        print(f"❌ 未找到凭证文件：{env_path}", file=sys.stderr)
+        print()
+        print("请创建该文件，格式：", file=sys.stderr)
+        print("  endpoint=http://your-zentao-host", file=sys.stderr)
+        print("  username=your-username", file=sys.stderr)
+        print("  password=your-password", file=sys.stderr)
         return 1
 
     client = ZenTaoClient(
@@ -346,8 +358,6 @@ def main(argv=None) -> int:
         credentials["password"],
     )
 
-    parser = build_parser()
-    args = parser.parse_args(argv if argv is not None else sys.argv[1:])
     handler = COMMANDS.get(args.command)
     if handler is None:
         parser.print_help()

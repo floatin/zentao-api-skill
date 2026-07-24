@@ -1,57 +1,56 @@
+"""Read ZenTao credentials from a .env file.
+
+Replaces the old TOOLS.md-based reader. The .env format is::
+
+    # comment
+    endpoint=http://example.com/zentao
+    username=alice
+    password=secret
+
+Quotes around values are stripped. Empty lines and ``#`` lines are ignored.
+"""
 from __future__ import annotations
+
 from pathlib import Path
 from typing import Optional, Dict
 
 
-def read_credentials() -> Optional[Dict[str, str]]:
-    """从 TOOLS.md 读取禅道凭证"""
-    tools_path = Path(__file__).parent.parent / "TOOLS.md"
+def default_env_path() -> Path:
+    """Return ``~/.config/zentao-cli/.env``, evaluated lazily so monkeypatch
+    on ``Path.home()`` works in tests.
+    """
+    return Path.home() / ".config" / "zentao-cli" / ".env"
 
-    if not tools_path.exists():
+
+def read_credentials(env_path: Optional[Path] = None) -> Optional[Dict[str, str]]:
+    """Return ``{endpoint, username, password}`` from ``env_path``.
+
+    Args:
+        env_path: Path to the .env file. Defaults to
+            ``~/.config/zentao-cli/.env`` when ``None``.
+
+    Returns:
+        A dict with the three keys, or ``None`` if any is missing or the
+        file doesn't exist.
+    """
+    path = Path(env_path) if env_path is not None else default_env_path()
+    if not path.exists():
         return None
 
-    content = tools_path.read_text(encoding="utf-8")
+    creds: Dict[str, str] = {}
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        creds[key.strip()] = value.strip().strip('"').strip("'")
 
-    # 查找禅道配置部分
-    zentao_section_start = -1
-    zentao_section_end = -1
-
-    lines = content.split("\n")
-    for i, line in enumerate(lines):
-        if "## 禅道 API" in line or "## 禅道" in line:
-            zentao_section_start = i
-        elif (
-            zentao_section_start >= 0
-            and line.strip().startswith("## ")
-            and zentao_section_start not in [i]
-        ):
-            zentao_section_end = i
-            break
-
-    if zentao_section_start < 0:
-        return None
-
-    # 提取禅道配置部分
-    if zentao_section_end < 0:
-        zentao_section = "\n".join(lines[zentao_section_start:])
-    else:
-        zentao_section = "\n".join(lines[zentao_section_start:zentao_section_end])
-
-    endpoint = None
-    username = None
-    password = None
-
-    for line in zentao_section.split("\n"):
-        line = line.strip()
-        if "API 地址" in line and "：" in line:
-            endpoint = line.split("：")[-1].strip().strip("*").strip()
-        elif "用户名" in line and "：" in line:
-            username = line.split("：")[-1].strip().strip("*").strip()
-        elif "密码" in line and "：" in line:
-            password = line.split("：")[-1].strip().strip("*").strip()
-
-    if endpoint and username and password:
-        return {"endpoint": endpoint, "username": username, "password": password}
-
+    if all(k in creds for k in ("endpoint", "username", "password")):
+        return {
+            "endpoint": creds["endpoint"],
+            "username": creds["username"],
+            "password": creds["password"],
+        }
     return None
-
