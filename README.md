@@ -4,11 +4,10 @@
 
 ## 特性
 
-- **独立可执行**：Nuitka 编译，arm64 macOS 单文件 12 MB，无运行时依赖
+- **独立可执行**：多平台编译，无运行时依赖
 - **只读优先**：7 个 GET 类子命令 + 5 个写操作子命令（含确认 prompt）
 - **Session 复用**：登录态持久化到 `~/.zentao-cli/`
 - **凭证外置**：`.env` 文件配置，与二进制分离，方便轮转密码
-- **集成 Python 库**：也可作为 `from zentao_api.client import ZenTaoClient` 在代码中使用
 
 ## 安装
 
@@ -62,9 +61,9 @@ zentao --help   # 安装时通过 [project.scripts] 注册
 ```bash
 mkdir -p ~/.config/zentao-cli
 cat > ~/.config/zentao-cli/.env <<EOF
-endpoint=http://zentao.yishou.com/zentao
-username=huaimin
-password=shen0527
+endpoint=http://zentao.xxx.com/zentao
+username=xxx
+password=xxx
 EOF
 chmod 600 ~/.config/zentao-cli/.env
 ```
@@ -83,7 +82,7 @@ chmod 600 ~/.config/zentao-cli/.env
 zentao-cli --env-file /path/to/.env products
 ```
 
-> `--help` 不会读凭证，可随时运行。
+> `--help` 查看更详细的使用说明。
 
 ## 使用
 
@@ -99,7 +98,7 @@ zentao-cli [-h] [--env-file ENV_FILE]
             create-story,create-task,batch-create-tasks,create-productplan,review-story}
 ```
 
-### 只读命令（7 个，无副作用）
+### 只读命令
 
 #### `products` — 查询产品列表
 
@@ -110,12 +109,11 @@ zentao-cli products
 ```
 📋 查询禅道产品列表
 
-✅ 共 22 条
 
 ID | 产品名称      | 状态 | 负责人
 ---+------------+----+----
-35 | AI选得准      |    |
-34 | 爆版后台需求    |    |
+35 | xxx      |    |
+34 | xxx    |    |
 ...
 ```
 
@@ -169,7 +167,7 @@ zentao-cli productplans --product-id 35
 zentao-cli create-story \
     --product-id 35 \
     --execution-id 200 \
-    --title "登录流程改造" \
+    --title "xxx流程改造" \
     --plan-id 0 \
     --reviewer alice
 ```
@@ -180,7 +178,7 @@ zentao-cli create-story \
 zentao-cli create-task \
     --execution-id 200 \
     --story-id 1234 \
-    --name "前端登录页面" \
+    --name "xxx登录页面" \
     --assign-to alice \
     --parent-id 999   # 可选，指定为子任务
 ```
@@ -230,27 +228,6 @@ zentao-cli review-story --story-id 1234
 
 **`--limit 0` 没有限制效果**
 设计如此：`--limit 0` 等同于不传。要限制请传正整数。
-
-## 作为 Python 库
-
-```python
-from zentao_api.client import ZenTaoClient
-
-client = ZenTaoClient(
-    endpoint="http://zentao.yishou.com/zentao",
-    username="huaimin",
-    password="shen0527",
-)
-
-# 列出产品
-ok, products = client.get_products()
-print(f"{len(products)} products")
-
-# 查项目下的需求
-ok, stories = client.get_stories("45")
-for s in stories:
-    print(f"[{s['id']}] {s['title']}")
-```
 
 148 个方法覆盖：产品、项目、需求、任务、Bug、QA 测试、发布、版本、计划。
 

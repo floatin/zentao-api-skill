@@ -2,3 +2,16 @@
 lib/__pycache__
 .DS_Store
 .zentao.pytest_cache
+
+# Build artifacts
+.venv/
+cli.dist/
+cli.build/
+build/
+*.onefile-build/
+
+# Session caches
+.zentao/
+
+# Nuitka debug artifacts
+nuitka-crash-report.xml
