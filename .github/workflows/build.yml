@@ -60,15 +60,8 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          python -m nuitka `
-            --standalone `
-            --disable-ccache `
-            --output-filename=zentao-cli `
-            zentao_api/cli.py
-          # Zip up the standalone directory
-          Compress-Archive -Path cli.dist/zentao-cli `
-            -DestinationPath zentao-cli-windows-x86_64.zip `
-            -Force
+          python -m nuitka --standalone --disable-ccache --output-filename=zentao-cli zentao_api/cli.py
+          Compress-Archive -Path cli.dist/zentao-cli -DestinationPath zentao-cli-windows-x86_64.zip -Force
           Get-Item zentao-cli-windows-x86_64.zip
 
       - name: Smoke test (POSIX)
