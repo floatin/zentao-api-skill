@@ -1,4 +1,4 @@
 .ruff_cache
 lib/__pycache__
 .DS_Store
-.zentao
+.zentao.pytest_cache
