@@ -71,10 +71,15 @@ jobs:
           $zipPath = "$env:RUNNER_TEMP\mingw.zip"
           if (-not (Test-Path $mingwDir)) {
             Write-Host "Downloading MinGW from $mingwUrl"
-            [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-            Invoke-WebRequest -Uri $mingwUrl -OutFile $zipPath -UseBasicParsing
+            # Use curl.exe (built into GitHub windows runners) — more reliable
+            # than Invoke-WebRequest which sometimes has TLS issues.
+            & curl.exe -L -s -o $zipPath $mingwUrl
             $sizeMb = [math]::Round((Get-Item $zipPath).Length / 1MB, 1)
             Write-Host "Downloaded $sizeMb MB"
+            if ($sizeMb -lt 50) {
+              Write-Host "FATAL: download too small, likely failed"
+              exit 1
+            }
             Write-Host "Extracting..."
             Expand-Archive -Path $zipPath -DestinationPath $mingwDir -Force
             # winlibs zip extracts into a subdirectory like "mingw64"
