@@ -84,11 +84,16 @@ jobs:
         shell: pwsh
         run: |
           python -m nuitka --standalone --disable-ccache --output-filename=zentao-cli zentao_api/cli.py
+          Write-Host "=== After build, cli.dist contents: ==="
+          Get-ChildItem cli.dist | Select-Object -First 10
+          Write-Host "=== Total files in cli.dist: $((Get-ChildItem cli.dist -Recurse | Measure-Object).Count) ==="
           # Same as POSIX: copy cli.dist\ into a zentao-cli\ folder before zipping.
           Remove-Item -Recurse -Force staging -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Path staging | Out-Null
           New-Item -ItemType Directory -Path staging/zentao-cli | Out-Null
           Copy-Item -Recurse -Force cli.dist/* staging/zentao-cli/
+          Write-Host "=== Staging contents: ==="
+          Get-ChildItem staging/zentao-cli | Select-Object -First 10
           Compress-Archive -Path staging/zentao-cli -DestinationPath zentao-cli-windows-x86_64.zip -Force
           Get-Item zentao-cli-windows-x86_64.zip
 
