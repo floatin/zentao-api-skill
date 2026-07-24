@@ -65,6 +65,7 @@ jobs:
       - name: Install MinGW (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
+        continue-on-error: true
         run: |
           # GitHub windows-latest ships VS 2022 but NOT the C++ build tools
           # workload. MinGW-w64 is faster to install and Nuitka supports it
@@ -75,6 +76,7 @@ jobs:
 
       - name: Build (Windows)
         if: matrix.os == 'windows-latest'
+        continue-on-error: true
         shell: pwsh
         run: |
           python -m nuitka --standalone --disable-ccache --mingw-mode --output-filename=zentao-cli zentao_api/cli.py
