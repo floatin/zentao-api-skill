@@ -1,0 +1,97 @@
+name: Build
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            artifact_name: zentao-cli-macos-arm64
+            artifact_path: cli.dist/zentao-cli
+            ext: ''
+          - os: ubuntu-latest
+            artifact_name: zentao-cli-linux-x86_64
+            artifact_path: cli.dist/zentao-cli
+            ext: ''
+          - os: windows-latest
+            artifact_name: zentao-cli-windows-x86_64.exe
+            artifact_path: cli.dist/zentao-cli.exe
+            ext: '.exe'
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install nuitka
+
+      - name: Build (POSIX)
+        if: matrix.os != 'windows-latest'
+        run: |
+          python -m nuitka \
+            --standalone \
+            --onefile \
+            --disable-ccache \
+            --jobs=$(nproc 2>/dev/null || echo 2) \
+            --output-filename=zentao-cli \
+            zentao_api/cli.py
+
+      - name: Build (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          python -m nuitka `
+            --standalone `
+            --onefile `
+            --disable-ccache `
+            --output-filename=zentao-cli `
+            zentao_api/cli.py
+
+      - name: Smoke test
+        run: |
+          chmod +x ${{ matrix.artifact_path }}
+          ./${{ matrix.artifact_path }} --help
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: ${{ matrix.artifact_path }}
+          if-no-files-found: error
+
+  release:
+    name: Attach binaries to GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true
