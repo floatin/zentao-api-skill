@@ -90,17 +90,17 @@ jobs:
       - name: Smoke test (POSIX)
         if: matrix.os != 'windows-latest'
         run: |
-          ./staging/zentao-cli/bin/zentao-cli --help
+          ./staging/zentao-cli/zentao-cli --help
           echo "---"
-          ./staging/zentao-cli/bin/zentao-cli 2>&1 | head -5 || true
+          ./staging/zentao-cli/zentao-cli 2>&1 | head -5 || true
 
       - name: Smoke test (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          .\staging\zentao-cli\bin\zentao-cli.exe --help
+          .\staging\zentao-cli\zentao-cli.exe --help
           Write-Host "---"
-          .\staging\zentao-cli\bin\zentao-cli.exe 2>&1 | Select-Object -First 5
+          .\staging\zentao-cli\zentao-cli.exe 2>&1 | Select-Object -First 5
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
