@@ -60,33 +60,31 @@ jobs:
           tar czf zentao-cli-${{ runner.os }}-${{ runner.arch }}.tar.gz -C staging zentao-cli
           ls -la zentao-cli-${{ runner.os }}-${{ runner.arch }}.tar.gz
 
-      - name: Install MSVC build tools (Windows)
+      - name: Install MinGW (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
-        # GitHub windows-latest has VS Enterprise but NOT the C++ build tools
-        # workload. Install just the C++ compiler (cl.exe) and Windows SDK.
-        # ~5 min download. Subsequent steps share the same shell via PATH.
         run: |
-          choco install -y visualstudio2022buildtools --package-parameters "--add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --add Microsoft.VisualStudio.Component.Windows11SDK.22621" --no-progress
-          # Verify cl.exe is reachable after install.
-          $cl = & "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvarsall.bat" x64 '&&' where cl.exe 2>&1
-          Write-Host "cl.exe discovery: $cl"
-
-      - name: Setup MSVC env (Windows)
-        if: matrix.os == 'windows-latest'
-        uses: ilammy/msvc-dev-cmd@v1
-        with:
-          arch: x64
+          # MinGW-w64 from choco. Smaller and faster than MSVC Build Tools
+          # (~30s vs ~5min). Nuitka's --mingw-mode uses gcc + ld.
+          choco install -y mingw-w64 --no-progress
+          $gcc = Get-Command gcc -ErrorAction SilentlyContinue
+          if (-not $gcc) {
+            Write-Host "FATAL: gcc not found after install"
+            Get-ChildItem "C:\ProgramData\chocolatey\lib\mingw-w64\tools\" -ErrorAction SilentlyContinue
+            exit 1
+          }
+          Write-Host "gcc found: $($gcc.Source)"
+          Write-Host "::add-path::C:\ProgramData\chocolatey\lib\mingw-w64\tools\mingw64\bin"
 
       - name: Build (Windows)
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          Write-Host "=== cl.exe (MSVC) availability: ==="
-          $cl = Get-Command cl.exe -ErrorAction SilentlyContinue
-          if ($cl) { Write-Host "found: $($cl.Source)" } else { Write-Host "MISSING" }
-          Write-Host "=== Running build ==="
-          python -m nuitka --standalone --disable-ccache --output-filename=zentao-cli zentao_api/cli.py 2>&1 | Select-Object -Last 30
+          Write-Host "=== gcc availability: ==="
+          $gcc = Get-Command gcc -ErrorAction SilentlyContinue
+          if ($gcc) { Write-Host "found: $($gcc.Source)" } else { Write-Host "MISSING" }
+          Write-Host "=== Running build with --show-scons-output ==="
+          python -m nuitka --standalone --disable-ccache --mingw-mode --show-scons-output --output-filename=zentao-cli zentao_api/cli.py 2>&1 | Select-Object -Last 40
           if ($LASTEXITCODE -ne 0) {
             Write-Host "=== BUILD FAILED ==="
             exit 1
