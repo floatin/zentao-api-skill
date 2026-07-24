@@ -64,17 +64,29 @@ jobs:
         if: matrix.os == 'windows-latest'
         shell: pwsh
         run: |
-          # MinGW-w64 from choco. Smaller and faster than MSVC Build Tools
-          # (~30s vs ~5min). Nuitka's --mingw-mode uses gcc + ld.
-          choco install -y mingw-w64 --no-progress
-          $gcc = Get-Command gcc -ErrorAction SilentlyContinue
+          # Download a portable MinGW-w64 from niXman's GitHub releases.
+          # ~30s, no admin needed, no choco friction. Architecture: x86_64,
+          # threads: posix (Python extension compatible), exception: seh.
+          $mingwUrl = "https://github.com/niXman/mingw-builds-binaries/releases/download/13.2.0-rt_v11-rev1/x86_64-13.2.0-release-posix-seh-ucrt-rt_v11-rev1.7z"
+          $mingwDir = "C:\mingw64"
+          if (-not (Test-Path $mingwDir)) {
+            Write-Host "Downloading MinGW from $mingwUrl"
+            $zipPath = "$env:TEMP\mingw.zip"
+            Invoke-WebRequest -Uri $mingwUrl -OutFile $zipPath -UseBasicParsing
+            Write-Host "Downloaded $([math]::Round((Get-Item $zipPath).Length / 1MB, 1)) MB"
+            # Extract using tar (Windows 10+ ships tar.exe)
+            New-Item -ItemType Directory -Path $mingwDir -Force | Out-Null
+            tar -xzf $zipPath -C $mingwDir
+            Remove-Item $zipPath
+          }
+          $gcc = Get-ChildItem "$mingwDir\bin\gcc.exe" -ErrorAction SilentlyContinue
           if (-not $gcc) {
-            Write-Host "FATAL: gcc not found after install"
-            Get-ChildItem "C:\ProgramData\chocolatey\lib\mingw-w64\tools\" -ErrorAction SilentlyContinue
+            Get-ChildItem $mingwDir
+            Write-Host "FATAL: gcc not found in $mingwDir"
             exit 1
           }
-          Write-Host "gcc found: $($gcc.Source)"
-          Write-Host "::add-path::C:\ProgramData\chocolatey\lib\mingw-w64\tools\mingw64\bin"
+          Write-Host "gcc found: $($gcc.FullName)"
+          Write-Host "::add-path::$mingwDir\bin"
 
       - name: Build (Windows)
         if: matrix.os == 'windows-latest'
