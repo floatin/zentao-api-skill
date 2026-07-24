@@ -10,7 +10,11 @@ class LegacyMixin:
     def get_product_list_old(self) -> Dict[str, str]:
         """获取产品列表（老 API）- 返回 {产品名：ID}"""
         data = self._data_unwrap("/product-index-no.json")
-        products = data.get("products", [])
+        products = data.get("products", {})
+        # ponytail: server returns either {id: name} (dict) or [{id, name}] (list).
+        # Handle both — the second form is rare but documented in older Zentao.
+        if isinstance(products, dict):
+            return {v: str(k) for k, v in products.items() if isinstance(v, str)}
         return {p["name"]: str(p["id"]) for p in products}
 
     def get_project_list_old(self, status: str = "all") -> Dict[str, str]:

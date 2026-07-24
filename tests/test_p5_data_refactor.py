@@ -41,8 +41,12 @@ def _ok(inner):
 )
 def test_method_uses__data_list_helper(client, method_name, path, key, inner_key):
     """The refactored method must return ``(True, _data(path, key))`` so the
-    underlying _data helper handles the json.loads unwrap."""
-    sentinel = {"__sentinel__": True}
+    underlying _data helper handles the json.loads unwrap.
+
+    Payload shape is a list to match the post-P6 normalise contract — the
+    server returns list-of-dict for most collection endpoints.
+    """
+    sentinel = [{"id": "x", "name": "y"}]
 
     def fake_old(method, actual_path, data=None):
         if inner_key:

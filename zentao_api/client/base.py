@@ -238,16 +238,36 @@ class BaseClient:
                 return True, data.get(key, [])
             return False, []
 
-        Returns ``[]`` on any failure or missing key. The caller still
-        receives a list-or-dict, never ``None`` or a raw envelope.
+        The ZenTao server's collection shapes are inconsistent across
+        endpoints — some return ``{id: {...}}`` dicts, others return
+        ``{id: "name"}`` dicts, others return ``[{...}]`` lists. To keep the
+        downstream contract uniform (``List[Dict]``), this helper normalises
+        dict-shaped payloads into ``[{id, ...rest}, ...]``. Scalars are
+        wrapped as ``{"id": ..., "name": ...}`` since that's the only scalar
+        mapping observed in the wild.
+
+        Returns ``[]`` on any failure or missing key.
         """
         success, result = self.old_request("GET", path)
         if not success or "data" not in result:
             return []
         try:
-            return json.loads(result["data"]).get(key, [])
+            inner = json.loads(result["data"]).get(key)
         except (ValueError, TypeError):
             return []
+        if inner is None:
+            return []
+        if isinstance(inner, list):
+            return inner
+        if isinstance(inner, dict):
+            items = []
+            for k, v in inner.items():
+                if isinstance(v, dict):
+                    items.append({"id": k, **v})
+                else:
+                    items.append({"id": k, "name": v})
+            return items
+        return [inner] if isinstance(inner, (str, int, float)) else []
 
     def _data_dict(self, path: str, key: str) -> Dict[str, Any]:
         """GET helper for single-object endpoints (e.g. ``/story-view-{id}.json``
