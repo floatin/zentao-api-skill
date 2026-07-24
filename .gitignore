@@ -15,3 +15,4 @@ build/
 
 # Nuitka debug artifacts
 nuitka-crash-report.xml
+zentao_api_skill.egg-info/

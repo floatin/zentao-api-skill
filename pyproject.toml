@@ -3,10 +3,10 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "zentao-api-skill"
-version = "0.1.0"
+name = "ys-zentao-api"
+version = "0.2.0"
 description = "禅道项目管理 API 客户端与命令行工具"
-readme = "zentao_roadmap.md"
+readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
     "requests>=2.28.0",
