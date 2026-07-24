@@ -17,17 +17,14 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            artifact_name: zentao-cli-macos-arm64
-            artifact_path: cli.dist/zentao-cli
             ext: ''
+            archive_ext: tar.gz
           - os: ubuntu-latest
-            artifact_name: zentao-cli-linux-x86_64
-            artifact_path: cli.dist/zentao-cli
             ext: ''
+            archive_ext: tar.gz
           - os: windows-latest
-            artifact_name: zentao-cli-windows-x86_64.exe
-            artifact_path: cli.dist/zentao-cli.exe
-            ext: '.exe'
+            ext: .exe
+            archive_ext: zip
 
     runs-on: ${{ matrix.os }}
 
@@ -49,11 +46,15 @@ jobs:
         run: |
           python -m nuitka \
             --standalone \
-            --onefile \
             --disable-ccache \
             --jobs=$(nproc 2>/dev/null || echo 2) \
             --output-filename=zentao-cli \
             zentao_api/cli.py
+          # Tar up the standalone directory for distribution
+          cd cli.dist
+          tar czf ../zentao-cli-${{ runner.os }}-${{ runner.arch }}.tar.gz zentao-cli
+          cd ..
+          ls -la zentao-cli-${{ runner.os }}-${{ runner.arch }}.tar.gz
 
       - name: Build (Windows)
         if: matrix.os == 'windows-latest'
@@ -61,21 +62,35 @@ jobs:
         run: |
           python -m nuitka `
             --standalone `
-            --onefile `
             --disable-ccache `
             --output-filename=zentao-cli `
             zentao_api/cli.py
+          # Zip up the standalone directory
+          Compress-Archive -Path cli.dist/zentao-cli `
+            -DestinationPath zentao-cli-windows-x86_64.zip `
+            -Force
+          Get-Item zentao-cli-windows-x86_64.zip
 
-      - name: Smoke test
+      - name: Smoke test (POSIX)
+        if: matrix.os != 'windows-latest'
         run: |
-          chmod +x ${{ matrix.artifact_path }}
-          ./${{ matrix.artifact_path }} --help
+          ./cli.dist/zentao-cli --help
+          echo "---"
+          ./cli.dist/zentao-cli 2>&1 | head -5 || true
+
+      - name: Smoke test (Windows)
+        if: matrix.os == 'windows-latest'
+        shell: pwsh
+        run: |
+          .\cli.dist\zentao-cli.exe --help
+          Write-Host "---"
+          .\cli.dist\zentao-cli.exe 2>&1 | Select-Object -First 5
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: ${{ matrix.artifact_path }}
+          name: zentao-cli-${{ runner.os }}-${{ runner.arch }}.${{ matrix.archive_ext }}
+          path: zentao-cli-${{ runner.os }}-${{ runner.arch }}.${{ matrix.archive_ext }}
           if-no-files-found: error
 
   release:
