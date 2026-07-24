@@ -653,11 +653,7 @@ class WritesMixin:
             >>> for task in tasks:
             ...     print(f"[{task['id']}] {task['name']} ({task['status']})")
         """
-        success, result = self.old_request("GET", f"/my-task-{task_type}.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            return True, data.get("tasks", [])
-        return False, []
+        return True, self._data(f"/my-task-{task_type}.json", "tasks")
 
     def get_my_bugs(
         self, bug_type: str = "assignedTo", order_by: str = "id_desc"
@@ -676,11 +672,7 @@ class WritesMixin:
             >>> for bug in bugs:
             ...     print(f"[{bug['id']}] {bug['title']} ({bug['status']})")
         """
-        success, result = self.old_request("GET", f"/my-bug-{bug_type}-{order_by}.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            return True, data.get("bugs", [])
-        return False, []
+        return True, self._data(f"/my-bug-{bug_type}-{order_by}.json", "bugs")
 
     def get_my_stories(self, story_type: str = "assignedTo") -> Tuple[bool, List[Dict]]:
         """获取我的需求列表（老 API）
@@ -696,11 +688,7 @@ class WritesMixin:
             >>> for story in stories:
             ...     print(f"[{story['id']}] {story['title']} ({story['status']})")
         """
-        success, result = self.old_request("GET", f"/my-story-{story_type}.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            return True, data.get("stories", [])
-        return False, []
+        return True, self._data(f"/my-story-{story_type}.json", "stories")
 
     def get_my_projects(self) -> Tuple[bool, List[Dict]]:
         """获取我的项目列表（老 API）
@@ -713,9 +701,5 @@ class WritesMixin:
             >>> for project in projects:
             ...     print(f"[{project['id']}] {project['name']}")
         """
-        success, result = self.old_request("GET", "/my-project.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            return True, data.get("projects", [])
-        return False, []
+        return True, self._data("/my-project.json", "projects")
 

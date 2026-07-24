@@ -32,7 +32,7 @@ def test_data_get_returns_nested_value(client):
         "old_request",
         return_value=_ok_payload({"stories": [{"id": "1"}], "extra": "x"}),
     ) as mocked:
-        result = client._data_get("/story-list.json", "stories")
+        result = client._data("/story-list.json", "stories")
 
     assert result == [{"id": "1"}]
     mocked.assert_called_once_with("GET", "/story-list.json")
@@ -41,7 +41,7 @@ def test_data_get_returns_nested_value(client):
 def test_data_get_returns_empty_default_when_payload_bad(client):
     """If old_request fails or the envelope is malformed, return [] / {}."""
     with patch.object(client, "old_request", return_value=(False, "boom")):
-        assert client._data_get("/x.json", "items") == []
+        assert client._data("/x.json", "items") == []
 
 
 def test_data_get_returns_dict_default_when_key_missing(client):
@@ -51,7 +51,7 @@ def test_data_get_returns_dict_default_when_key_missing(client):
         "old_request",
         return_value=_ok_payload({"other": "x"}),
     ):
-        assert client._data_get("/x.json", "missing") == []
+        assert client._data("/x.json", "missing") == []
 
 
 # ---------- _change_task_status helper ---------------------------------------

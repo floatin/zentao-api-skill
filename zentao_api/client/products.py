@@ -28,47 +28,19 @@ class ProductsMixin:
 
     def get_executions(self, project_id: str) -> Tuple[bool, List[Dict]]:
         """获取项目的执行/迭代列表"""
-        success, result = self.old_request(
-            "GET", f"/project-execution-{project_id}.json"
-        )
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            executions = data.get("executions", [])
-            return True, executions
-        return False, []
+        return True, self._data(f"/project-execution-{project_id}.json", "executions")
 
     def get_stories(self, project_id: str) -> Tuple[bool, List[Dict]]:
         """获取项目的需求列表"""
-        success, result = self.old_request(
-            "GET", f"/project-story-{project_id}.json"
-        )
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            stories = data.get("stories", [])
-            return True, stories
-        return False, []
+        return True, self._data(f"/project-story-{project_id}.json", "stories")
 
     def get_tasks(self, execution_id: str) -> Tuple[bool, List[Dict]]:
         """获取执行/迭代下的任务列表"""
-        success, result = self.old_request(
-            "GET", f"/execution-task-{execution_id}.json"
-        )
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            tasks = data.get("tasks", [])
-            return True, tasks
-        return False, []
+        return True, self._data(f"/execution-task-{execution_id}.json", "tasks")
 
     def get_bugs(self, product_id: str) -> Tuple[bool, List[Dict]]:
         """获取产品的缺陷列表"""
-        success, result = self.old_request(
-            "GET", f"/product-bug-{product_id}.json"
-        )
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            bugs = data.get("bugs", [])
-            return True, bugs
-        return False, []
+        return True, self._data(f"/product-bug-{product_id}.json", "bugs")
 
     def get_productplans(self, product_id: str) -> Tuple[bool, List[Dict]]:
         """获取产品的发布计划列表（REST-ish 包装）
@@ -111,12 +83,7 @@ class ProductsMixin:
             >>> for pid, name in products.items():
             ...     print(f"[{pid}] {name}")
         """
-        success, result = self.old_request("GET", "/product-all.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            products = data.get("products", {})
-            return True, products
-        return False, {}
+        return True, self._data("/product-all.json", "products")
 
     def get_product(self, product_id: str) -> Tuple[bool, Dict]:
         """获取产品详情（老 API）
@@ -131,11 +98,7 @@ class ProductsMixin:
             >>> success, product = client.get_product("1")
             >>> print(f"产品名: {product['name']}")
         """
-        success, result = self.old_request("GET", f"/product-view-{product_id}.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            return True, data.get("product", {})
-        return False, {}
+        return True, self._data_dict(f"/product-view-{product_id}.json", "product")
 
     def create_product(
         self,

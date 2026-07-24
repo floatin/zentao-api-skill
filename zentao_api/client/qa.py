@@ -45,11 +45,7 @@ class QAMixin:
             >>> success, case = client.get_testcase("1")
             >>> print(f"标题: {case['title']}")
         """
-        success, result = self.old_request("GET", f"/testcase-view-{case_id}.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            return True, data.get("case", {})
-        return False, {}
+        return True, self._data_dict(f"/testcase-view-{case_id}.json", "case")
 
     def create_testcase(
         self,
@@ -204,11 +200,7 @@ class QAMixin:
             >>> success, suite = client.get_testsuite("1")
             >>> print(f"套件名: {suite['name']}")
         """
-        success, result = self.old_request("GET", f"/testsuite-view-{suite_id}.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            return True, data.get("suite", {})
-        return False, {}
+        return True, self._data_dict(f"/testsuite-view-{suite_id}.json", "suite")
 
     def create_testsuite(
         self, product_id: str, name: str, desc: str = ""
@@ -281,11 +273,7 @@ class QAMixin:
             >>> success, task = client.get_testtask("1")
             >>> print(f"任务名: {task['name']}")
         """
-        success, result = self.old_request("GET", f"/testtask-view-{task_id}.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            return True, data.get("task", {})
-        return False, {}
+        return True, self._data_dict(f"/testtask-view-{task_id}.json", "task")
 
     def create_testtask(
         self, product_id: str, name: str, begin: str = "", end: str = "", desc: str = ""

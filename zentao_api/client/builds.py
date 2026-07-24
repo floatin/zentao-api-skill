@@ -1,6 +1,5 @@
 from __future__ import annotations
 from typing import Dict, List, Optional, Tuple, Any
-import json
 
 
 class BuildsMixin:
@@ -78,11 +77,7 @@ class BuildsMixin:
             >>> success, build = client.get_build("1")
             >>> print(f"版本名: {build['name']}")
         """
-        success, result = self.old_request("GET", f"/build-view-{build_id}.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            return True, data.get("build", {})
-        return False, {}
+        return True, self._data_dict(f"/build-view-{build_id}.json", "build")
 
     def delete_build(self, build_id: str) -> Tuple[bool, Dict]:
         """删除版本（老 API）

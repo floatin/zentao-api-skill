@@ -20,11 +20,7 @@ class StoriesMixin:
             >>> success, story = client.get_story("1")
             >>> print(f"需求标题: {story['title']}")
         """
-        success, result = self.old_request("GET", f"/story-view-{story_id}.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            return True, data.get("story", {})
-        return False, {}
+        return True, self._data_dict(f"/story-view-{story_id}.json", "story")
 
     def create_story(
         self,
@@ -214,11 +210,7 @@ class StoriesMixin:
             >>> for bug in bugs:
             ...     print(f"[{bug['id']}] {bug['title']}")
         """
-        success, result = self.old_request("GET", f"/story-bugs-{story_id}.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            return True, data.get("bugs", [])
-        return False, []
+        return True, self._data(f"/story-bugs-{story_id}.json", "bugs")
 
     def get_story_cases(self, story_id: str) -> Tuple[bool, List[Dict]]:
         """获取需求关联的测试用例（老 API）
@@ -234,11 +226,7 @@ class StoriesMixin:
             >>> for case in cases:
             ...     print(f"[{case['id']}] {case['title']}")
         """
-        success, result = self.old_request("GET", f"/story-cases-{story_id}.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            return True, data.get("cases", [])
-        return False, []
+        return True, self._data(f"/story-cases-{story_id}.json", "cases")
 
     def link_story_project(self, story_id: str, project_id: str) -> Tuple[bool, Dict]:
         """需求关联项目（老 API）

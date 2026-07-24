@@ -24,11 +24,7 @@ class BugsMixin:
             >>> for bug in bugs:
             ...     print(f"[{bug['id']}] {bug['title']} ({bug['status']})")
         """
-        success, result = self.old_request("GET", f"/project-bug-{project_id}.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            return True, data.get("bugs", [])
-        return False, []
+        return True, self._data(f"/project-bug-{project_id}.json", "bugs")
 
     def get_bug(self, bug_id: str) -> Tuple[bool, Dict]:
         """获取Bug详情（老 API）
@@ -43,11 +39,7 @@ class BugsMixin:
             >>> success, bug = client.get_bug("1")
             >>> print(f"标题: {bug['title']}, 状态: {bug['status']}")
         """
-        success, result = self.old_request("GET", f"/bug-view-{bug_id}.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            return True, data.get("bug", {})
-        return False, {}
+        return True, self._data_dict(f"/bug-view-{bug_id}.json", "bug")
 
     def create_bug(
         self,

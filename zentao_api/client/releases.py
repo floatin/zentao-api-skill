@@ -1,6 +1,5 @@
 from __future__ import annotations
 from typing import Dict, List, Optional, Tuple, Any
-import json
 
 
 class ReleasesMixin:
@@ -21,11 +20,7 @@ class ReleasesMixin:
             >>> for release in releases:
             ...     print(f"[{release['id']}] {release['name']}")
         """
-        success, result = self.old_request("GET", f"/release-browse-{product_id}.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            return True, data.get("releases", [])
-        return False, []
+        return True, self._data(f"/release-browse-{product_id}.json", "releases")
 
 
     # ==================== 发布模块补充方法 ====================
@@ -104,11 +99,7 @@ class ReleasesMixin:
             >>> success, release = client.get_release("1")
             >>> print(f"发布名: {release['name']}")
         """
-        success, result = self.old_request("GET", f"/release-view-{release_id}.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            return True, data.get("release", {})
-        return False, {}
+        return True, self._data_dict(f"/release-view-{release_id}.json", "release")
 
     def delete_release(self, release_id: str) -> Tuple[bool, Dict]:
         """删除发布（老 API）

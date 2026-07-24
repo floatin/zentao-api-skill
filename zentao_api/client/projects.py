@@ -241,11 +241,7 @@ class ProjectsMixin:
             >>> for member in team:
             ...     print(f"{member['account']}: {member['role']}")
         """
-        success, result = self.old_request("GET", f"/project-team-{project_id}.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            return True, data.get("team", [])
-        return False, []
+        return True, self._data(f"/project-team-{project_id}.json", "team")
 
     def get_project_dynamic(
         self, project_id: str, dynamic_type: str = "all"

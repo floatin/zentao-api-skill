@@ -9,12 +9,9 @@ class LegacyMixin:
 
     def get_product_list_old(self) -> Dict[str, str]:
         """获取产品列表（老 API）- 返回 {产品名：ID}"""
-        success, result = self.old_request("GET", "/product-index-no.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            products = data.get("products", [])
-            return {p["name"]: str(p["id"]) for p in products}
-        return {}
+        data = self._data_unwrap("/product-index-no.json")
+        products = data.get("products", [])
+        return {p["name"]: str(p["id"]) for p in products}
 
     def get_project_list_old(self, status: str = "all") -> Dict[str, str]:
         """获取项目列表（老 API）
@@ -22,12 +19,7 @@ class LegacyMixin:
         Returns:
             {项目ID: 项目名} 例如 {'1': 'config', '2': 'project2'}
         """
-        success, result = self.old_request("GET", "/project-browse-all.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            projects = data.get("projects", {})
-            return projects
-        return {}
+        return self._data_unwrap("/project-browse-all.json").get("projects", {})
 
     def get_bug_list_old(self, product_id: str, branch: str = "0") -> List[Dict]:
         """获取缺陷列表（老 API）
@@ -58,14 +50,10 @@ class LegacyMixin:
         Returns:
             {计划名：ID}
         """
-        success, result = self.old_request(
-            "GET", f"/productplan-browse-{product_id}-{branch}-all.json"
-        )
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            plans = data.get("productPlansNum", {})
-            return {v["title"]: v["id"] for k, v in plans.items()}
-        return {}
+        plans = self._data_unwrap(
+            f"/productplan-browse-{product_id}-{branch}-all.json"
+        ).get("productPlansNum", {})
+        return {v["title"]: v["id"] for k, v in plans.items()}
 
     def get_project_tasks_old(
         self,
@@ -90,15 +78,9 @@ class LegacyMixin:
         Note:
             已取消的任务可能不显示在列表中，请使用 get_task_detail 查询单个任务状态
         """
-        success, result = self.old_request(
-            "GET",
-            f"/project-task-{project_id}-{status}-id_desc-{module_id}-{limit}-{page}.json",
-        )
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            tasks = data.get("tasks", {})
-            return tasks
-        return {}
+        return self._data_unwrap(
+            f"/project-task-{project_id}-{status}-id_desc-{module_id}-{limit}-{page}.json"
+        ).get("tasks", {})
 
     def get_task_detail(self, task_id: str) -> Tuple[bool, Dict]:
         """获取单个任务详情（老 API）
@@ -112,10 +94,11 @@ class LegacyMixin:
         Note:
             此方法可获取任务的真实状态（包括已取消状态），适用于验证操作结果
         """
-        success, result = self.old_request("GET", f"/task-view-{task_id}.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            task = data.get("task", {})
-            return True, task
-        return False, {}
+        # ponytail: 保留 (success, dict) 双元素返回，因为外部大量代码依赖这个
+        # 包装协议（_change_task_status 在 BaseClient 内部就根据 success 决定
+        # 是否继续）。仅在服务端真的返回 success 时才返回 True。
+        success, _ = self.old_request("GET", f"/task-view-{task_id}.json")
+        if not success:
+            return False, {}
+        return True, self._data_dict(f"/task-view-{task_id}.json", "task")
 

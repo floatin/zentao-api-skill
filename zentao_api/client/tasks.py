@@ -1,6 +1,5 @@
 from __future__ import annotations
 from typing import Dict, List, Optional, Tuple, Any
-import json
 
 
 class TasksMixin:
@@ -68,11 +67,7 @@ class TasksMixin:
             >>> for task in subtasks:
             ...     print(f"[{task['id']}] {task['name']}")
         """
-        success, result = self.old_request("GET", f"/task-viewSubtasks-{task_id}.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            return True, data.get("children", [])
-        return False, []
+        return True, self._data(f"/task-viewSubtasks-{task_id}.json", "children")
 
     def link_task_story(self, task_id: str, story_id: str) -> Tuple[bool, Dict]:
         """任务关联需求（老 API）
@@ -118,9 +113,5 @@ class TasksMixin:
             >>> for record in history:
             ...     print(f"{record['date']}: {record['action']}")
         """
-        success, result = self.old_request("GET", f"/task-history-{task_id}.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            return True, data.get("history", [])
-        return False, []
+        return True, self._data(f"/task-history-{task_id}.json", "history")
 

@@ -96,11 +96,7 @@ class PlansMixin:
             >>> success, plan = client.get_plan("1")
             >>> print(f"计划名: {plan['title']}")
         """
-        success, result = self.old_request("GET", f"/productplan-view-{plan_id}.json")
-        if success and "data" in result:
-            data = json.loads(result["data"])
-            return True, data.get("plan", {})
-        return False, {}
+        return True, self._data_dict(f"/productplan-view-{plan_id}.json", "plan")
 
     def edit_plan(self, plan_id: str, **kwargs) -> Tuple[bool, Dict]:
         """编辑计划（老 API）

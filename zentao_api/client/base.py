@@ -227,7 +227,7 @@ class BaseClient:
         except Exception as e:
             return False, str(e)
 
-    def _data_get(self, path: str, key: str):
+    def _data(self, path: str, key: str):
         """GET helper: unwrap ``old_request``'s envelope and return ``data[key]``.
 
         Replaces the 100+ copies of::
@@ -249,3 +249,29 @@ class BaseClient:
         except (ValueError, TypeError):
             return []
 
+    def _data_dict(self, path: str, key: str) -> Dict[str, Any]:
+        """GET helper for single-object endpoints (e.g. ``/story-view-{id}.json``
+        returning ``{"story": {...}}``). Returns ``{}`` on failure or missing key.
+        """
+        success, result = self.old_request("GET", path)
+        if not success or "data" not in result:
+            return {}
+        try:
+            return json.loads(result["data"]).get(key, {})
+        except (ValueError, TypeError):
+            return {}
+
+    def _data_unwrap(self, path: str) -> Dict[str, Any]:
+        """GET helper that returns the raw inner payload (after json.loads).
+
+        Use this when a method needs the full envelope to transform it (e.g.
+        ``get_product_list_old`` reshapes ``{"products": [...]}`` into
+        ``{name: id}``). Returns ``{}`` on failure.
+        """
+        success, result = self.old_request("GET", path)
+        if not success or "data" not in result:
+            return {}
+        try:
+            return json.loads(result["data"])
+        except (ValueError, TypeError):
+            return {}
