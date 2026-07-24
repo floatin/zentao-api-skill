@@ -31,13 +31,10 @@ class WritesMixin:
         Returns:
             (success, result)
         """
-
-        # 构建 multipart/form-data
-        boundary = "----WebKitFormBoundary" + "".join(
-            [chr(ord("A") + i % 26) for i in range(16)]
-        )
-
-        lines = []
+        # ponytail: was 124 lines of hand-rolled multipart. ``requests`` builds
+        # the multipart body from a files dict; (None, value) makes it a regular
+        # form field rather than a file upload.
+        files: Dict[str, Any] = {}
         for i, task in enumerate(tasks):
             name = task.get("name", "")
             estimate = task.get("estimate", "")
@@ -45,84 +42,27 @@ class WritesMixin:
             task_type = task.get("type", "devel")
             pri = task.get("pri", "3")
 
-            # 第一个任务用实际值
             if i == 0:
-                lines.append(f"--{boundary}")
-                lines.append('Content-Disposition: form-data; name="module[0]"')
-                lines.append("")
-                lines.append("0")
-
-                lines.append(f"--{boundary}")
-                lines.append('Content-Disposition: form-data; name="parent[0]"')
-                lines.append("")
-                lines.append(parent_id)
-
-                lines.append(f"--{boundary}")
-                lines.append('Content-Disposition: form-data; name="name[0]"')
-                lines.append("")
-                lines.append(name)
-
-                lines.append(f"--{boundary}")
-                lines.append('Content-Disposition: form-data; name="type[0]"')
-                lines.append("")
-                lines.append(task_type)
-
-                lines.append(f"--{boundary}")
-                lines.append('Content-Disposition: form-data; name="assignedTo[0]"')
-                lines.append("")
-                lines.append(assigned_to)
-
-                lines.append(f"--{boundary}")
-                lines.append('Content-Disposition: form-data; name="estimate[0]"')
-                lines.append("")
-                lines.append(str(estimate))
-
-                lines.append(f"--{boundary}")
-                lines.append('Content-Disposition: form-data; name="pri[0]"')
-                lines.append("")
-                lines.append(str(pri))
+                files["module[0]"] = (None, "0")
+                files["parent[0]"] = (None, parent_id)
+                files["name[0]"] = (None, name)
+                files["type[0]"] = (None, task_type)
+                files["assignedTo[0]"] = (None, assigned_to)
+                files["estimate[0]"] = (None, str(estimate))
+                files["pri[0]"] = (None, str(pri))
             else:
-                # 后续任务用 ditto
-                for field in ["module", "parent", "story"]:
-                    lines.append(f"--{boundary}")
-                    lines.append(f'Content-Disposition: form-data; name="{field}[{i}]"')
-                    lines.append("")
-                    lines.append("ditto" if field in ["parent", "story"] else "0")
-
-                lines.append(f"--{boundary}")
-                lines.append(f'Content-Disposition: form-data; name="name[{i}]"')
-                lines.append("")
-                lines.append(name)
-
-                lines.append(f"--{boundary}")
-                lines.append(f'Content-Disposition: form-data; name="type[{i}]"')
-                lines.append("")
-                lines.append("ditto")
-
-                lines.append(f"--{boundary}")
-                lines.append(f'Content-Disposition: form-data; name="assignedTo[{i}]"')
-                lines.append("")
-                lines.append("ditto")
-
-                lines.append(f"--{boundary}")
-                lines.append(f'Content-Disposition: form-data; name="estimate[{i}]"')
-                lines.append("")
-                lines.append(str(estimate))
-
-                lines.append(f"--{boundary}")
-                lines.append(f'Content-Disposition: form-data; name="pri[{i}]"')
-                lines.append("")
-                lines.append("ditto")
-
-        lines.append(f"--{boundary}--")
-
-        body = "\r\n".join(lines)
+                files[f"module[{i}]"] = (None, "0")
+                files[f"parent[{i}]"] = (None, "ditto")
+                files[f"story[{i}]"] = (None, "ditto")
+                files[f"name[{i}]"] = (None, name)
+                files[f"type[{i}]"] = (None, "ditto")
+                files[f"assignedTo[{i}]"] = (None, "ditto")
+                files[f"estimate[{i}]"] = (None, str(estimate))
+                files[f"pri[{i}]"] = (None, "ditto")
 
         url = f"{self.old_api_base}/task-batchCreate-{execution_id}-{story_id}-{module_id}-{parent_id}.html"
-        headers = {"Content-Type": f"multipart/form-data; boundary={boundary}"}
-
         response = self.session.post(
-            url, data=body, headers=headers, params={"zentaosid": self.sid}, timeout=30
+            url, files=files, params={"zentaosid": self.sid}, timeout=30
         )
 
         if response.status_code == 200:
@@ -130,11 +70,58 @@ class WritesMixin:
                 "message": "创建子任务成功",
                 "status_code": response.status_code,
             }
-        else:
-            return False, {
-                "message": f"创建失败: HTTP {response.status_code}",
-                "status_code": response.status_code,
-            }
+        return False, {
+            "message": f"创建失败: HTTP {response.status_code}",
+            "status_code": response.status_code,
+        }
+
+    def _change_task_status(
+        self,
+        task_id: str,
+        new_status: str,
+        comment: str = "",
+    ) -> Tuple[bool, Dict]:
+        """共享状态变更后端。
+
+        ``task-edit-{id}.json`` 需要任务现有字段全回传，只换 status。
+        cancel_task / start_task 共用这个模式。
+        """
+        success, task = self.get_task_detail(task_id)
+        if not success:
+            return False, {"message": f"获取任务失败: {task}"}
+        data = {
+            "id": task_id,
+            "parent": task.get("parent", "0"),
+            "project": task.get("project", "0"),
+            "module": task.get("module", "0"),
+            "story": task.get("story", "0"),
+            "name": task.get("name", ""),
+            "type": task.get("type", "devel"),
+            "pri": task.get("pri", "3"),
+            "estimate": task.get("estimate", "0"),
+            "left": task.get("left", "0"),
+            "consumed": task.get("consumed", "0"),
+            "assignedTo": task.get("assignedTo", "admin"),
+            "status": new_status,
+        }
+        if comment:
+            data["comment"] = comment
+        return self.old_request("POST", f"/task-edit-{task_id}.json", data)
+
+    def cancel_task(self, task_id: str, comment: str = "") -> Tuple[bool, Dict]:
+        """取消任务（老 API）
+
+        Note:
+            取消后任务状态变为 'cancel'，但可能不显示在项目任务列表中。
+            建议使用 get_task_detail(task_id) 验证取消结果。
+
+        Example:
+            >>> success, result = client.cancel_task("6", "功能暂缓开发")
+            >>> if success:
+            >>>     ok, task = client.get_task_detail("6")
+            >>>     print(f"任务状态: {task.get('status')}")  # cancel
+        """
+        return self._change_task_status(task_id, "cancel", comment)
 
     def delete_task(self, task_id: str) -> Tuple[bool, Dict]:
         """删除任务（老 API）
@@ -146,63 +133,6 @@ class WritesMixin:
             (success, result)
         """
         return self.old_request("POST", f"/task-delete-{task_id}.json")
-
-    def cancel_task(self, task_id: str, comment: str = "") -> Tuple[bool, Dict]:
-        """取消任务（老 API）
-
-        Args:
-            task_id: 任务ID
-            comment: 取消原因
-
-        Returns:
-            (success, result) result 包含 status 和 data
-
-        Note:
-            取消后任务状态变为 'cancel'，但可能不显示在项目任务列表中。
-            建议使用 get_task_detail(task_id) 验证取消结果。
-
-        Example:
-            >>> success, result = client.cancel_task("6", "功能暂缓开发")
-            >>> if success:
-            >>>     # 验证取消结果
-            >>>     ok, task = client.get_task_detail("6")
-            >>>     print(f"任务状态: {task.get('status')}")  # 应为 'cancel'
-        """
-        # 先获取任务详情
-        success, task = self.get_task_detail(task_id)
-        if not success:
-            return False, {"message": f"获取任务失败: {task}"}
-
-        # 基础字段
-        data = {
-            "status": "cancel",
-            "assignedTo": task.get("assignedTo", ""),
-            "name": task.get("name", ""),
-            "type": task.get("type", "devel"),
-            "pri": str(task.get("pri", "3")),
-            "estimate": str(task.get("estimate", "0")),
-            "left": str(task.get("left", "0")),
-            "consumed": str(task.get("consumed", "0")),
-        }
-
-        # 子任务需要传 parent，一级任务不需要
-        parent = task.get("parent", "0")
-        if parent and parent != "0":
-            data["parent"] = str(parent)
-
-        if comment:
-            data["comment"] = comment
-
-        url = f"{self.old_api_base}/task-edit-{task_id}.json?zentaosid={self.sid}"
-        response = self.session.post(url, data=data, timeout=30)
-
-        if response.status_code == 200:
-            return True, {
-                "message": "取消任务成功",
-                "status_code": response.status_code,
-            }
-        else:
-            return False, {"message": f"取消失败: HTTP {response.status_code}"}
 
     def close_task(self, task_id: str, comment: str = "") -> Tuple[bool, Dict]:
         """关闭任务（老 API）
@@ -235,15 +165,6 @@ class WritesMixin:
     def start_task(self, task_id: str, comment: str = "") -> Tuple[bool, Dict]:
         """开始任务（老 API）
 
-        Args:
-            task_id: 任务ID
-            comment: 开始备注（可选）
-
-        Returns:
-            (success, result)
-            注意：即使返回 success=False（因为返回HTML），任务也可能已开始。
-            请使用 get_task_detail(task_id) 验证结果。
-
         Note:
             开始后任务状态变为 'doing'。
             实际使用 task-edit 接口修改状态，因为 task-start 接口会直接完成任务。
@@ -252,33 +173,9 @@ class WritesMixin:
             >>> success, result = client.start_task("10", "开始开发")
             >>> # 验证开始结果
             >>> ok, task = client.get_task_detail("10")
-            >>> print(f"任务状态: {task.get('status')}")  # 应为 'doing'
+            >>> print(f"任务状态: {task.get('status')}")  # doing
         """
-        # 先获取任务详情
-        ok, task = self.get_task_detail(task_id)
-        if not ok:
-            return False, {"error": "无法获取任务详情"}
-
-        # 用 task-edit 修改状态为 doing
-        edit_data = {
-            "id": task_id,
-            "parent": task.get("parent", "0"),
-            "project": task.get("project", "0"),
-            "module": task.get("module", "0"),
-            "story": task.get("story", "0"),
-            "name": task.get("name", ""),
-            "type": task.get("type", "devel"),
-            "pri": task.get("pri", "3"),
-            "estimate": task.get("estimate", "0"),
-            "left": task.get("left", "0"),
-            "consumed": task.get("consumed", "0"),
-            "assignedTo": task.get("assignedTo", "admin"),
-            "status": "doing",
-        }
-        if comment:
-            edit_data["comment"] = comment
-
-        return self.old_request("POST", f"/task-edit-{task_id}.json", edit_data)
+        return self._change_task_status(task_id, "doing", comment)
 
     def record_estimate(
         self, task_id: str, records: List[Dict[str, str]]

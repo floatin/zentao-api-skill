@@ -227,3 +227,25 @@ class BaseClient:
         except Exception as e:
             return False, str(e)
 
+    def _data_get(self, path: str, key: str):
+        """GET helper: unwrap ``old_request``'s envelope and return ``data[key]``.
+
+        Replaces the 100+ copies of::
+
+            success, result = self.old_request("GET", "/x.json")
+            if success and "data" in result:
+                data = json.loads(result["data"])
+                return True, data.get(key, [])
+            return False, []
+
+        Returns ``[]`` on any failure or missing key. The caller still
+        receives a list-or-dict, never ``None`` or a raw envelope.
+        """
+        success, result = self.old_request("GET", path)
+        if not success or "data" not in result:
+            return []
+        try:
+            return json.loads(result["data"]).get(key, [])
+        except (ValueError, TypeError):
+            return []
+
