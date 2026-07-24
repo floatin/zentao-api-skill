@@ -67,10 +67,11 @@ jobs:
         shell: pwsh
         run: |
           # GitHub windows-latest ships VS 2022 but NOT the C++ build tools
-          # workload. MinGW is faster to install and Nuitka supports it via
-          # --mingw-mode. ~30 sec download.
-          choco install -y mingw --no-progress
-          Write-Host "::add-path::C:\tools\mingw64\bin"
+          # workload. MinGW-w64 is faster to install and Nuitka supports it
+          # via --mingw-mode. ~30 sec download.
+          choco install -y mingw-w64 --no-progress
+          Write-Host "::add-path::C:\ProgramData\chocolatey\lib\mingw-w64\tools\mingw64\bin"
+          gcc --version
 
       - name: Build (Windows)
         if: matrix.os == 'windows-latest'
