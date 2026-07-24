@@ -51,9 +51,12 @@ jobs:
             --output-filename=zentao-cli \
             zentao_api/cli.py
           # Package the whole cli.dist/ — the binary needs Python framework
-          # and .so siblings alongside it. Archive layout: zentao-cli/bin/zentao-cli.
-          mkdir -p staging
-          cp -R cli.dist staging/zentao-cli
+          # and .so siblings alongside it. Use rsync for a clean recursive copy.
+          rm -rf staging
+          mkdir staging
+          rsync -a cli.dist/ staging/zentao-cli/
+          ls staging/zentao-cli/ | head -5
+          echo "---"
           tar czf zentao-cli-${{ runner.os }}-${{ runner.arch }}.tar.gz -C staging zentao-cli
           ls -la zentao-cli-${{ runner.os }}-${{ runner.arch }}.tar.gz
 
@@ -82,8 +85,10 @@ jobs:
         run: |
           python -m nuitka --standalone --disable-ccache --mingw-mode --output-filename=zentao-cli zentao_api/cli.py
           # Same as POSIX: copy cli.dist\ into a zentao-cli\ folder before zipping.
-          New-Item -ItemType Directory -Force -Path staging | Out-Null
-          Copy-Item -Recurse -Force cli.dist staging/zentao-cli
+          Remove-Item -Recurse -Force staging -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path staging | Out-Null
+          New-Item -ItemType Directory -Path staging/zentao-cli | Out-Null
+          Copy-Item -Recurse -Force cli.dist/* staging/zentao-cli/
           Compress-Archive -Path staging/zentao-cli -DestinationPath zentao-cli-windows-x86_64.zip -Force
           Get-Item zentao-cli-windows-x86_64.zip
 
