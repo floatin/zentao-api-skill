@@ -164,9 +164,12 @@ def cmd_productplans(client, args):
         print(f"❌ 查询失败：{plans}")
         return
     print(f"✅ 共 {len(plans)} 个发布计划\n")
+    if not plans:
+        print("无数据")
+        return
     _print_table(
         ["ID", "计划名称"],
-        [[p.get("id", ""), p.get("title", "")] for p in plans],
+        [[p.get("id", ""), p.get("name", "")] for p in plans],
     )
 
 

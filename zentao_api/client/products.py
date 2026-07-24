@@ -46,10 +46,9 @@ class ProductsMixin:
         """获取产品的发布计划列表（REST-ish 包装）
 
         老 API 返回 {title: id} 字典，这里规范化为 [{id, title}, ...]。
+        空数据返回 (True, [])，"无计划"不等于"查询失败"。
         """
         plan_dict = self.get_productplan_list_old(product_id)
-        if not plan_dict:
-            return False, []
         return True, [{"id": pid, "title": title} for title, pid in plan_dict.items()]
 
     def batch_create_tasks(
