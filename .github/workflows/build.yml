@@ -80,20 +80,30 @@ jobs:
 
       - name: Build (Windows)
         if: matrix.os == 'windows-latest'
-        continue-on-error: true
         shell: pwsh
         run: |
-          python -m nuitka --standalone --disable-ccache --output-filename=zentao-cli zentao_api/cli.py
-          Write-Host "=== After build, cli.dist contents: ==="
+          # Verify which compilers are actually available before invoking Nuitka.
+          Write-Host "=== cl.exe (MSVC) availability: ==="
+          $null = & cl.exe 2>&1; if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq 1) { Write-Host "found" } else { Write-Host "MISSING" }
+          Write-Host "=== gcc (MinGW) availability: ==="
+          $gcc = Get-Command gcc -ErrorAction SilentlyContinue
+          if ($gcc) { Write-Host "found: $($gcc.Source)" } else { Write-Host "MISSING" }
+          Write-Host "=== python -m nuitka --version ==="
+          python -m nuitka --version
+          Write-Host "=== Running build ==="
+          python -m nuitka --standalone --disable-ccache --output-filename=zentao-cli zentao_api/cli.py 2>&1 | Tee-Object -Variable buildOutput | Select-Object -Last 30
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "=== BUILD FAILED, last 30 lines above ==="
+            exit 1
+          }
+          Write-Host "=== Build OK. cli.dist contents: ==="
           Get-ChildItem cli.dist | Select-Object -First 10
-          Write-Host "=== Total files in cli.dist: $((Get-ChildItem cli.dist -Recurse | Measure-Object).Count) ==="
-          # Same as POSIX: copy cli.dist\ into a zentao-cli\ folder before zipping.
+          Write-Host "=== Total files in cli.dist: ==="
+          (Get-ChildItem cli.dist -Recurse | Measure-Object).Count
           Remove-Item -Recurse -Force staging -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Path staging | Out-Null
           New-Item -ItemType Directory -Path staging/zentao-cli | Out-Null
           Copy-Item -Recurse -Force cli.dist/* staging/zentao-cli/
-          Write-Host "=== Staging contents: ==="
-          Get-ChildItem staging/zentao-cli | Select-Object -First 10
           Compress-Archive -Path staging/zentao-cli -DestinationPath zentao-cli-windows-x86_64.zip -Force
           Get-Item zentao-cli-windows-x86_64.zip
 
