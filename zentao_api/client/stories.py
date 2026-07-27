@@ -64,8 +64,15 @@ class StoriesMixin:
         data = {
             "product": product_id,
             "title": title,
-            "module": module,
         }
+        # ponytail: ZenTao's old API rejects module=0 / plan=0 in the POST
+        # body (the "0" sentinel is OK in the URL path, where it's a positional
+        # placeholder, but the body has a strict schema). Only emit these
+        # fields when the caller supplied a real ID.
+        if module and module != "0":
+            data["module"] = module
+        if plan and plan != "0":
+            data["plan"] = plan
         data.update(kwargs)
 
         # URL: /story-create-{product}-{module}-{story}-{plan}-{execution}-{branch}-{module}-{type}.json
