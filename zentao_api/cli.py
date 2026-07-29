@@ -203,8 +203,12 @@ def cmd_create_task(client, args):
         print("❌ 操作已取消")
         return
     success, result = client.create_task(
-        args.execution_id, args.story_id, args.name, args.assign_to,
-        args.parent_id,
+        project=args.execution_id,
+        name=args.name,
+        story=args.story_id,
+        assignedTo=args.assign_to,
+        module="0",
+        parent=args.parent_id,
     )
     print(f"✅ 新建成功，任务 ID: {result.get('id', '未知')}" if success
           else f"❌ 新建失败：{result}")

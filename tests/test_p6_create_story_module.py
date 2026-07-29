@@ -172,3 +172,51 @@ def test_review_story_accepts_explicit_reviewer(client):
         client.review_story("10701", "pass", reviewed_by="alice")
 
     assert captured["data"]["reviewedBy"] == "alice"
+
+
+# ---------- create_tasks must include developEnd[0] -------------------
+
+
+def test_create_tasks_body_includes_develop_end(client):
+    """Without `developEnd[0]` the server returns 422 '任务方不能为空'."""
+    from zentao_api.client.writes import WritesMixin
+
+    captured = {}
+
+    def fake(method, path, data=None):
+        captured["path"] = path
+        captured["data"] = data or {}
+        return True, {"result": "success", "message": "保存成功"}
+
+    with patch.object(client, "old_request", side_effect=fake):
+        # Direct call to the batch helper (create_task delegates to it).
+        WritesMixin.create_tasks(
+            client,
+            project="281",
+            story_id="10770",
+            tasks=[{"name": "sub", "assignedTo": "huaimin"}],
+        )
+
+    assert captured["path"] == "/task-batchCreate-281-10770-0-0.json"
+    assert captured["data"]["developEnd[0]"] == "0"
+    assert captured["data"]["name[0]"] == "sub"
+    assert captured["data"]["assignedTo[0]"] == "huaimin"
+
+
+def test_create_tasks_honors_explicit_develop_end(client):
+    from zentao_api.client.writes import WritesMixin
+
+    captured = {}
+
+    def fake(method, path, data=None):
+        captured["data"] = data or {}
+        return True, {"result": "success", "message": "保存成功"}
+
+    with patch.object(client, "old_request", side_effect=fake):
+        WritesMixin.create_tasks(
+            client,
+            project="281",
+            tasks=[{"name": "x", "developEnd": "125"}],
+        )
+
+    assert captured["data"]["developEnd[0]"] == "125"

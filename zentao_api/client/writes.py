@@ -632,6 +632,10 @@ class WritesMixin:
             data[f"estimate[{i}]"] = str(task.get("estimate", "0"))
             data[f"pri[{i}]"] = str(task.get("pri", "3"))
             data[f"desc[{i}]"] = task.get("desc", "")
+            # ponytail: the task form label "任务方" is `developEnd` not
+            # `execution`. Empty value triggers "任务方不能为空" 422.
+            # Default to "0" (no specific task-side) — server accepts it.
+            data[f"developEnd[{i}]"] = task.get("developEnd", "0")
 
         return self.old_request(
             "POST",
