@@ -1,0 +1,123 @@
+{
+  "runId": "45ecff35-5edc-4e2c-a7d0-29feabef6194",
+  "agent": "worker",
+  "task": "You are a delegated subagent running from a fork of the parent session. Treat the inherited conversation as reference-only context, not a live thread to continue. Do not continue or answer prior messages as if they are waiting for a reply. Your sole job is to execute the task below and return a focused result for that task using your tools.\n\nTask:\n## 任务：P0 + P4 — 修复 CLI 断链 + 删除重复 `create_story`\n\n### 上下文\n仓库：`/Users/floating/workspace/zentao-api-skill/`\n- `zentao_api/cli.py` (557 行) 调用 `zentao_api/client.py` (3567 行，137 方法) 的方法\n- `zentao_api/client.py` 是单个 `ZenTaoClient` 类\n- 已存在测试目录：`scripts/test_*.py`（针对真实 ZenTao 服务，**不要**修改）\n\n### P0 — 修复 CLI 断链\n\n`cli.py` 调用了 `client.py` **不存在**的方法：\n\n| cli.py 调用 | client.py 实际情况 |\n|---|---|\n| `client.get_projects(status)` | 只有 `get_project_list_old()` |\n| `client.get_executions(project_id)` | **完全不存在**（需新增） |\n| `client.get_stories(project_id)` | **完全不存在**（需新增） |\n| `client.get_tasks(execution_id)` | 只有 `get_project_tasks_old()` |\n| `client.get_bugs(product_id)` | 只有 `get_bug_list_old()` 和 `get_project_bugs()` |\n| `client.get_productplans(product_id)` | 只有 `get_productplan_list_old()` |\n| `client.batch_create_tasks(...)` | 只有 `create_tasks()` 和 `create_subtasks()` |\n| `client.create_productplan(...)` | 只有 `create_plan()` |\n\n**要求：**\n- 优先**在 `client.py` 中补齐缺失方法**，保持与现有命名风格一致\n- 新方法复用现有 `_data_get` 模式（如果存在）或 `old_request + json.loads` 模式\n- `cli.py` 中已有降级到老 API 的回退逻辑；优先补 REST-ish 方法，方法名与 `cli.py` 调用一致\n\n补齐的方法（最终要满足 cli.py 调用）：\n1. `get_projects(status='doing') -> Tuple[bool, List[Dict]]` — 用 `/project-index-{status}.json` 端点\n2. `get_executions(project_id) -> Tuple[bool, List[Dict]]` — 用 `/project-execution-{project_id}.json`\n3. `get_stories(project_id) -> Tuple[bool, List[Dict]]` — 用 `/project-story-{project_id}.json`\n4. `get_tasks(execution_id) -> Tuple[bool, List[Dict]]` — 用 `/execution-task-{execution_id}.json`\n5. `get_bugs(product_id) -> Tuple[bool, List[Dict]]` — 用 `/product-bug-{product_id}.json`\n6. `get_productplans(product_id) -> Tuple[bool, List[Dict]]` — 把 `_old` 字典返回转成 `[{id, title}, ...]` 列表形式\n7. `batch_create_tasks(execution_id, parent_id, tasks) -> Tuple[bool, Dict]` — 委托给现有 `create_tasks()` 或 `create_subtasks()`\n8. `create_productplan(product_id, title) -> Tuple[bool, Dict]` — 委托给 `create_plan()`\n\n**注意：** URL 端点路径如果不确定，看现有方法（如 `get_my_*`）的路径风格去猜，但**不要**瞎编。在测试中 mock 掉 `old_request`，所以实际 URL 不重要，只要函数签名匹配即可。\n\n### P4 — 删除重复 `create_story`\n\n`client.py` 中 `create_story` 定义了**两次**：\n- 行 350：`(product_id, execution_id, title, module, plan_id, branch, reviewer)`\n- 行 1711：`(product_id, title, module, plan, execution_id, branch, **kwargs)` ← 覆盖前者\n\n**要求：**\n- 保留**签名更通用**的版本（行 1711，带 `**kwargs`），删除行 350 的版本\n- 同时更新 cli.py 中 `cmd_create_story` 的 `client.create_story` 调用以匹配新签名\n\n### 测试要求（mock 方式）\n\n在 `tests/` 目录下新建测试文件（用 `unittest.mock` mock `requests` / `old_request`）：\n\n1. `tests/test_client_missing_methods.py` — 覆盖 P0 新增的 8 个方法，每个方法一个测试，mock `old_request` 返回 `{\"status\":\"success\",\"data\":\"{\\\"key\\\": [...]}\"}`，断言返回值正确解析\n2. `tests/test_create_story_signature.py` — 验证 `create_story` 的最终签名是 `(product_id, title, ...)` 形式，验证 cli.py 调用能匹配\n3. `tests/test_cli_command_routing.py` — mock 掉 `ZenTaoClient`，验证 cli.py 的 `parse_args` 能解析中文命令（如 \"禅道需求列表 项目=176\"），并分发到正确的 cmd 函数\n\n测试必须：\n- 不依赖网络（全部 mock）\n- 用 `python -m pytest tests/ -v` 全过\n- 不引入新的第三方依赖\n\n### 提交流程\n每完成一个里程碑就 `git commit`：\n1. `git add tests/ zentao_api/client.py` 然后 commit \"P0: 补齐 cli 缺失方法\"\n2. `git add zentao_api/client.py zentao_api/cli.py` 然后 commit \"P4: 合并重复的 create_story\"\n3. `git add tests/` 然后 commit \"test: cli 路由与 create_story 签名测试\"\n\n### 不要做\n- 不要碰 `scripts/test_*.py`（这些是真服务器测试）\n- 不要拆 client.py（P1 才做）\n- 不要重写 cli.py（P3 才做）\n- 不要改 `pyproject.toml` 或 `requirements.txt`（除非需要 pytest）\n\n完成后报告：\n- 改了哪些文件、行数\n- 测试通过的命令与输出\n- 三个 commit 的 hash\n- 任何未解决的疑问\n\n## Acceptance Contract\nAcceptance level: reviewed\nCompletion is not accepted from prose alone. End with a structured acceptance report.\n\nCriteria:\n- criterion-1: Implement the requested change without widening scope\n- criterion-2: Return evidence sufficient for an independent acceptance review\n\nRequired evidence: changed-files, tests-added, commands-run, validation-output, residual-risks, no-staged-files\n\nReview gate: required by reviewer.\n\nFinish with a fenced JSON block tagged `acceptance-report` in this shape:\nUse empty arrays when no items apply; array fields contain strings unless object entries are shown.\n`criteriaSatisfied[].status` must be exactly one of: satisfied, not-satisfied, not-applicable.\n`commandsRun[].result` must be exactly one of: passed, failed, not-run.\n`manualNotes` and `notes` are optional strings; an empty string means no note and does not satisfy `manual-notes` evidence.\n```acceptance-report\n{\n  \"criteriaSatisfied\": [\n    {\n      \"id\": \"criterion-1\",\n      \"status\": \"satisfied\",\n      \"evidence\": \"specific proof\"\n    },\n    {\n      \"id\": \"criterion-2\",\n      \"status\": \"satisfied\",\n      \"evidence\": \"specific proof\"\n    }\n  ],\n  \"changedFiles\": [\n    \"src/file.ts\"\n  ],\n  \"testsAddedOrUpdated\": [\n    \"test/file.test.ts\"\n  ],\n  \"commandsRun\": [\n    {\n      \"command\": \"command\",\n      \"result\": \"passed\",\n      \"summary\": \"short result\"\n    }\n  ],\n  \"validationOutput\": [\n    \"validation output or concise summary\"\n  ],\n  \"residualRisks\": [\n    \"none\"\n  ],\n  \"noStagedFiles\": true,\n  \"diffSummary\": \"short description of the diff\",\n  \"reviewFindings\": [\n    \"blocker: file.ts:12 - issue found, or no blockers\"\n  ],\n  \"manualNotes\": \"anything else the parent should know\"\n}\n```",
+  "exitCode": 1,
+  "model": "anthropic/claude-sonnet-4:off",
+  "attemptedModels": [
+    "anthropic/claude-sonnet-4:off"
+  ],
+  "modelAttempts": [
+    {
+      "model": "anthropic/claude-sonnet-4:off",
+      "success": false,
+      "exitCode": 1,
+      "error": "No API key found for anthropic.\n\nUse /login to log into a provider via OAuth or API key. See:\n  /Users/floating/.hermes/node/lib/node_modules/@earendil-works/pi-coding-agent/docs/providers.md\n  /Users/floating/.hermes/node/lib/node_modules/@earendil-works/pi-coding-agent/docs/models.md",
+      "usage": {
+        "input": 0,
+        "output": 0,
+        "cacheRead": 0,
+        "cacheWrite": 0,
+        "cost": 0,
+        "turns": 0
+      }
+    }
+  ],
+  "error": "No API key found for anthropic.\n\nUse /login to log into a provider via OAuth or API key. See:\n  /Users/floating/.hermes/node/lib/node_modules/@earendil-works/pi-coding-agent/docs/providers.md\n  /Users/floating/.hermes/node/lib/node_modules/@earendil-works/pi-coding-agent/docs/models.md",
+  "acceptance": {
+    "status": "rejected",
+    "explicit": false,
+    "effectiveAcceptance": {
+      "level": "reviewed",
+      "explicit": false,
+      "inferredReason": [
+        "async write-capable or risky run"
+      ],
+      "criteria": [
+        {
+          "id": "criterion-1",
+          "must": "Implement the requested change without widening scope",
+          "evidence": [
+            "changed-files",
+            "tests-added",
+            "commands-run",
+            "validation-output",
+            "residual-risks",
+            "no-staged-files"
+          ],
+          "severity": "required"
+        },
+        {
+          "id": "criterion-2",
+          "must": "Return evidence sufficient for an independent acceptance review",
+          "evidence": [
+            "changed-files",
+            "tests-added",
+            "commands-run",
+            "validation-output",
+            "residual-risks",
+            "no-staged-files"
+          ],
+          "severity": "required"
+        }
+      ],
+      "evidence": [
+        "changed-files",
+        "tests-added",
+        "commands-run",
+        "validation-output",
+        "residual-risks",
+        "no-staged-files"
+      ],
+      "verify": [],
+      "review": {
+        "agent": "reviewer",
+        "required": true
+      },
+      "stopRules": []
+    },
+    "inferredReason": [
+      "async write-capable or risky run"
+    ],
+    "criteria": [
+      {
+        "id": "criterion-1",
+        "must": "Implement the requested change without widening scope",
+        "evidence": [
+          "changed-files",
+          "tests-added",
+          "commands-run",
+          "validation-output",
+          "residual-risks",
+          "no-staged-files"
+        ],
+        "severity": "required"
+      },
+      {
+        "id": "criterion-2",
+        "must": "Return evidence sufficient for an independent acceptance review",
+        "evidence": [
+          "changed-files",
+          "tests-added",
+          "commands-run",
+          "validation-output",
+          "residual-risks",
+          "no-staged-files"
+        ],
+        "severity": "required"
+      }
+    ],
+    "runtimeChecks": [
+      {
+        "id": "attestation",
+        "status": "failed",
+        "message": "Structured acceptance report not found."
+      }
+    ],
+    "verifyRuns": [],
+    "childReportParseError": "Structured acceptance report not found."
+  },
+  "transcriptPath": "/Users/floating/workspace/zentao-api-skill/.pi-subagents/artifacts/45ecff35-5edc-4e2c-a7d0-29feabef6194_worker_transcript.jsonl",
+  "skills": [],
+  "timestamp": 1784828406864
+}

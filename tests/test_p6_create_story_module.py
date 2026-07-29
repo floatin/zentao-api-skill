@@ -20,7 +20,9 @@ import pytest
 # ---------- URL is unchanged (still uses 0 placeholder) --------------------
 
 
-def test_create_story_url_uses_0_when_module_default(client):
+def test_create_story_url_always_uses_0_for_module_positions(client):
+    """P10: URL module positions are always ``0`` (positional placeholders).
+    The real module value goes in the POST body only."""
     captured = {}
 
     def fake(method, path, data=None):
@@ -30,18 +32,21 @@ def test_create_story_url_uses_0_when_module_default(client):
         return True, {"status": "success", "data": '{"id": 1}'}
 
     with patch.object(client, "old_request", side_effect=fake):
-        client.create_story(product_id="35", title="x")
+        client.create_story(product_id="35", title="x", module="[模块1]")
 
     assert captured["method"] == "POST"
-    # 9-segment URL: product-module-story-plan-execution-branch-module-type
+    # URL always uses 0 for module positions regardless of module value.
     assert captured["path"] == "/story-create-35-0-0-0-0-0-0-0-story.json"
+    # Real module is in the body.
+    assert captured["data"]["module"] == "[模块1]"
 
 
 # ---------- body must NOT carry module=0 / plan=0 -----------------------
 
 
-def test_create_story_body_omits_module_zero(client):
-    """The reported bug: server rejects ``module=0`` in the body."""
+def test_create_story_body_always_includes_module(client):
+    """P10: module is always sent in the POST body — server requires it.
+    Default ``"0"`` is fine in the body (it's the root module)."""
     captured = {}
 
     def fake(method, path, data=None):
@@ -51,8 +56,8 @@ def test_create_story_body_omits_module_zero(client):
     with patch.object(client, "old_request", side_effect=fake):
         client.create_story(product_id="35", title="x")
 
-    assert "module" not in captured["data"], (
-        f"module should be omitted when defaulted to '0', got body: {captured['data']}"
+    assert "module" in captured["data"], (
+        f"module must always be in body, got: {captured['data']}"
     )
 
 
@@ -86,12 +91,8 @@ def test_create_story_includes_real_module_in_body(client):
         client.create_story(product_id="35", title="x", module="505")
 
     assert captured["data"]["module"] == "505"
-    # URL also embeds the real module id in both positions.
-    # Pattern: /story-create-{p}-{m}-0-{plan}-{exec}-{branch}-{m}-0-story.json
-    # With m=505: /story-create-35-505-0-0-0-0-505-0-story.json
-    assert "505" in captured["path"]
-    # module appears twice in URL (positions 2 and 7) when set.
-    assert captured["path"].count("505") == 2
+    # P10: URL always uses 0 for module positions (real value in body only).
+    assert "505" not in captured["path"]
 
 
 def test_create_story_includes_real_plan_in_body(client):
@@ -128,9 +129,8 @@ def test_create_story_body_has_required_fields(client):
 
     assert captured["data"]["product"] == "35"
     assert captured["data"]["title"] == "登录流程"
-    # execution_id/plan/branch are named params (used in URL), not body
-    # module/plan omitted from body because defaulted to "0"
-    assert "module" not in captured["data"]
+    # module is always in body (server requires it); plan omitted when "0".
+    assert captured["data"]["module"] == "0"
     assert "plan" not in captured["data"]
     # reviewer is dropped from the create body — it belongs on
     # review-story, not on the INSERT into zt_story (no such column).

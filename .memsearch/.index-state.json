@@ -1,0 +1,16 @@
+{
+  "collection": "ms_zentao_api_skill_b4ec57a0",
+  "failed_files": [],
+  "last_completed_at": "2026-07-29T09:59:00.547283Z",
+  "last_error": "RuntimeError: Failed to open the local Milvus Lite database. If this database was created with an older Milvus Lite release, it may not be compatible with Milvus Lite 3.x. Move the existing .db file aside, then rebuild the index from your source markdown files with 'memsearch index'. Alternatively, use Milvus Server via Docker or Zilliz Cloud.",
+  "last_failed_at": "2026-07-29T09:59:00.547283Z",
+  "last_started_at": "2026-07-29T09:58:59.752809Z",
+  "milvus_uri": "~/.memsearch/milvus.db",
+  "operation": "watch",
+  "paths": [
+    "/Users/floating/workspace/zentao-api-skill/.memsearch/memory"
+  ],
+  "schema_version": 1,
+  "status": "error",
+  "updated_at": "2026-07-29T09:59:00.547283Z"
+}

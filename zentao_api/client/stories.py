@@ -65,13 +65,9 @@ class StoriesMixin:
         data = {
             "product": product_id,
             "title": title,
+            "module": module,
         }
-        # ponytail: ZenTao's old API rejects module=0 / plan=0 in the POST
-        # body (the "0" sentinel is OK in the URL path, where it's a positional
-        # placeholder, but the body has a strict schema). Only emit these
-        # fields when the caller supplied a real ID.
-        if module and module != "0":
-            data["module"] = module
+        # ponytail: plan=0 still rejected by server — only emit when real.
         if plan and plan != "0":
             data["plan"] = plan
         # ponytail: zt_story has no `reviewer` column — reviewer lives in
@@ -80,10 +76,11 @@ class StoriesMixin:
         kwargs.pop("reviewer", None)
         data.update(kwargs)
 
-        # URL: /story-create-{product}-{module}-{story}-{plan}-{execution}-{branch}-{module}-{type}.json
+        # URL: module positions are always "0" (positional placeholders).
+        # The real module value goes in the POST body only.
         return self.old_request(
             "POST",
-            f"/story-create-{product_id}-{module}-0-{plan}-{execution_id}-{branch}-{module}-0-story.json",
+            f"/story-create-{product_id}-0-0-{plan}-{execution_id}-{branch}-0-0-story.json",
             data,
         )
 

@@ -45,6 +45,7 @@ class BugsMixin:
         self,
         product_id: str,
         title: str,
+        module: str = "[模块1]",
         opened_build: str = "trunk",
         project_id: str = None,
         case_id: str = None,
@@ -55,11 +56,11 @@ class BugsMixin:
         Args:
             product_id: 产品ID
             title: Bug标题
+            module: 所属模块，如 "[模块1]" / "[模块2]"，必填
             opened_build: 影响版本，默认 "trunk"
             project_id: 项目ID（可选）
             case_id: 测试用例ID（可选，用于关联测试用例）
             **kwargs: 其他参数，如:
-                - module: 模块ID
                 - severity: 严重程度 (1-4)
                 - pri: 优先级 (0-4)
                 - type: Bug类型 (codeerror, config, install, security, performance, standard, automation, designdefect, others)
@@ -70,29 +71,17 @@ class BugsMixin:
         Returns:
             (success, result) 创建结果
 
-        Note:
-            创建Bug需要产品存在且有权限。
-            传入 case_id 可以关联测试用例。
-
         Example:
             >>> success, result = client.create_bug(
-            ...     product_id="1",
-            ...     title="测试Bug",
-            ...     severity="3",
-            ...     pri="3",
+            ...     product_id="36", title="测试Bug",
+            ...     module="[模块1]", severity="3", pri="3",
             ...     assignedTo="admin"
-            ... )
-            >>> # 从测试用例创建Bug
-            >>> success, result = client.create_bug(
-            ...     product_id="1",
-            ...     title="从测试用例创建的Bug",
-            ...     case_id="8",
-            ...     steps="测试用例8发现的问题"
             ... )
         """
         data = {
             "product": product_id,
             "title": title,
+            "module": module,
             "openedBuild": opened_build,
         }
         if project_id:

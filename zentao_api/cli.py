@@ -177,6 +177,7 @@ def cmd_create_story(client, args):
     if not _confirm("新建需求", {
         "产品 ID": args.product_id,
         "执行 ID": args.execution_id,
+        "模块": args.module,
         "需求标题": args.title,
         "计划 ID": args.plan_id,
         "评审人": args.reviewer or "默认",
@@ -186,11 +187,38 @@ def cmd_create_story(client, args):
     success, result = client.create_story(
         product_id=args.product_id,
         title=args.title,
+        module=args.module,
         execution_id=args.execution_id,
         plan=args.plan_id,
         reviewer=args.reviewer,
     )
     print(f"✅ 新建成功，需求 ID: {result.get('id', '未知')}" if success
+          else f"❌ 新建失败：{result}")
+
+
+def cmd_create_bug(client, args):
+    info = {
+        "产品 ID": args.product_id,
+        "模块": args.module,
+        "Bug 标题": args.title,
+        "严重程度": args.severity,
+        "指派给": args.assigned_to or "默认",
+    }
+    if args.project_id:
+        info["项目 ID"] = args.project_id
+    if not _confirm("新建 Bug", info):
+        print("❌ 操作已取消")
+        return
+    success, result = client.create_bug(
+        product_id=args.product_id,
+        title=args.title,
+        module=args.module,
+        severity=args.severity,
+        pri=args.pri,
+        project_id=args.project_id or None,
+        assignedTo=args.assigned_to or None,
+    )
+    print(f"✅ 新建成功，Bug ID: {result.get('id', '未知')}" if success
           else f"❌ 新建失败：{result}")
 
 
@@ -444,6 +472,7 @@ COMMANDS: Dict[str, Callable[[ZenTaoClient, argparse.Namespace], None]] = {
     "bugs": cmd_bugs,
     "productplans": cmd_productplans,
     "create-story": cmd_create_story,
+    "create-bug": cmd_create_bug,
     "create-task": cmd_create_task,
     "batch-create-tasks": cmd_batch_create_tasks,
     "create-productplan": cmd_create_productplan,
@@ -504,8 +533,18 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--product-id", required=True)
     sp.add_argument("--execution-id", required=True)
     sp.add_argument("--title", required=True)
+    sp.add_argument("--module", required=True, help="模块，如 [模块1] / [模块2]")
     sp.add_argument("--plan-id", default="0")
     sp.add_argument("--reviewer", default="")
+
+    sp = sub.add_parser("create-bug", help="新建 Bug")
+    sp.add_argument("--product-id", required=True)
+    sp.add_argument("--title", required=True)
+    sp.add_argument("--module", required=True, help="模块，如 [模块1] / [模块2]")
+    sp.add_argument("--severity", default="3", help="严重程度 1-4")
+    sp.add_argument("--pri", default="3", help="优先级 0-4")
+    sp.add_argument("--project-id", default=None)
+    sp.add_argument("--assigned-to", default=None)
 
     sp = sub.add_parser("create-task", help="新建任务")
     sp.add_argument("--execution-id", required=True)
