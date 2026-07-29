@@ -6,7 +6,7 @@
 
 - **轻量**：纯 Python + `requests`，装一个包就能用
 - **凭证外置**：`.env` 文件配置，与代码分离，方便轮转密码
-- **28 个子命令**：7 个只读 + 21 个写操作（4 类工单：需求/任务/Bug/计划）
+- **29 个子命令**：7 个只读 + 22 个写操作（4 类工单：需求/任务/Bug/计划）
 - **集成 Python 库**：也可作为 `from zentao_api.client import ZenTaoClient` 在代码中使用
 - 148+ 个方法覆盖：产品、项目、需求、任务、Bug、QA 测试、发布、版本、计划
 
@@ -81,14 +81,15 @@ zentao --env-file /path/to/.env products
 zentao --help
 ```
 
-输出 28 个子命令：
+输出 29 个子命令：
 
 ```
 zentao [-h] [--env-file ENV_FILE]
        {products,projects,executions,stories,tasks,bugs,productplans,
-        create-story, create-task, batch-create-tasks, create-productplan, review-story,
-        start-task, pause-task, restart-task, finish-task, close-task, cancel-task,
-        activate-task, assign-task,
+        create-story, create-bug, create-task, batch-create-tasks,
+        create-productplan, review-story,
+        start-task, pause-task, restart-task, finish-task, close-task,
+        cancel-task, activate-task, assign-task,
         assign-bug, confirm-bug, resolve-bug, close-bug, activate-bug,
         assign-story, close-story, activate-story}
 ```
@@ -143,7 +144,7 @@ zentao productplans --product-id 35
 
 写操作前会打印操作详情并要求 `y/n` 确认。CI/脚本中可管道 `echo y |` 自动确认。
 
-#### 创建类（5 个）
+#### 创建类（6 个）
 
 ##### `create-story` — 新建需求
 
@@ -152,10 +153,26 @@ zentao create-story \
     --product-id 35 \
     --execution-id 200 \
     --title "登录流程改造" \
+    --module "[模块1]" \
     --plan-id 0
 ```
 
-> ZenTao 旧 API 要求 `module` 字段（如 `[模块1]` / `[模块2]`），CLI 默认传 `module=0`（URL 占位符），body 不发送。如需绑定到具体模块，CLI 当前未支持 — 调 Python client。
+> `--module` 必填（如 `[模块1]` / `[模块2]`），ZenTao 服务端要求。
+
+##### `create-bug` — 新建 Bug
+
+```bash
+zentao create-bug \
+    --product-id 36 \
+    --title "登录页面报错" \
+    --module "[模块2]" \
+    --severity 3 \
+    --pri 3 \
+    --assigned-to alice \
+    --project-id 281   # 可选
+```
+
+> `--module` 必填。`--severity` (1-4)、`--pri` (0-4)、`--project-id`、`--assigned-to` 可选。
 
 ##### `create-task` — 新建任务
 
@@ -276,7 +293,7 @@ zentao activate-story --story-id 1234
 可能是 ZenTao 服务端验证规则问题（如 `start-task` 在某些 server 配置下被拒）。CLI 端已正确发出请求，错误在 server 端。
 
 **`create-story` / `create-bug` 提示 "『所属模块』不能为空"**
-ZenTao 老 API 要求 `module` 字段（`[模块1]` / `[模块2]` 格式），CLI 默认传 `module=0`（URL 占位符）。如需绑模块，调 Python client 直接传 `module="[模块1]"`。
+`--module` 参数是必填的，传 `[模块1]` / `[模块2]` 等格式。
 
 ## 作为 Python 库
 
@@ -304,12 +321,11 @@ client.pause_task("1234")
 client.finish_task("1234")
 client.close_task("1234")
 
-# 创建带模块的 Bug（CLI 不支持的细节）
+# 创建带模块的 Bug
 client.create_bug(
-    product_id="36", module="[模块1]", project="281", opened_build="1",
-    title="bug 标题", steps="<p>步骤</p>",
-    assigned_to="huaimin", type="codeerror", severity="3", pri="3",
-    deadline="2026-12-31",
+    product_id="36", module="[模块1]", project_id="281",
+    title="bug 标题", severity="3", pri="3",
+    assignedTo="huaimin",
 )
 ```
 
@@ -321,7 +337,7 @@ client.create_bug(
 ys-zentao-api/
 ├── zentao_api/
 │   ├── __init__.py
-│   ├── cli.py                # argparse + 命令字典分发（28 个子命令）
+│   ├── cli.py                # argparse + 命令字典分发（29 个子命令）
 │   └── client/               # 11 个 mixin 组成的包
 │       ├── _base.py          # 鉴权 + old_request + _data helpers
 │       ├── _credentials.py   # .env 读取
@@ -336,7 +352,7 @@ ys-zentao-api/
 │       ├── builds.py         # 版本
 │       ├── plans.py          # 计划
 │       └── writes.py         # 任务状态变更 + get_my_*
-├── tests/                    # 166 个 mock 单元测试
+├── tests/                    # 178 个 mock 单元测试
 ├── .github/workflows/test.yml
 ├── pyproject.toml
 └── README.md
@@ -349,9 +365,9 @@ pip install -e . pytest
 pytest tests/ -v
 ```
 
-166 个 mock 测试覆盖：
+178 个 mock 测试覆盖：
 - 11 个 mixin 的核心方法
-- CLI 28 个子命令的 parser 注册 + dispatch
+- CLI 29 个子命令的 parser 注册 + dispatch
 - `.env` 解析与路径处理
 - 失败 / 取消 / 参数错误各路径
 
