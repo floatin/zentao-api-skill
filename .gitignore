@@ -9,6 +9,7 @@ __pycache__/
 cli.dist/
 cli.build/
 build/
+dist/
 *.onefile-build/
 
 # Session caches

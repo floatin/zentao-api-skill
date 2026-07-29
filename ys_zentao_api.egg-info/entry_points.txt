@@ -1,2 +1,0 @@
-[console_scripts]
-zentao = zentao_api.cli:main
