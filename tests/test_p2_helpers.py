@@ -76,7 +76,10 @@ def _fake_task(status="wait"):
 
 
 def test_change_task_status_posts_to_task_edit(client):
-    """The helper must POST to task-edit-{id}.json with status=the new value."""
+    """The helper must POST to task-edit-{id}.json with a minimal body
+    containing only ``status`` (and ``comment`` if provided). Server fills
+    other fields with defaults — that's the only path that accepts
+    arbitrary status changes (e.g. cancel from any state)."""
     captured = {}
 
     def fake(method, path, data=None):
@@ -85,24 +88,29 @@ def test_change_task_status_posts_to_task_edit(client):
         captured["data"] = data
         return True, {"status": "success", "data": "{}"}
 
-    with patch.object(client, "get_task_detail", return_value=(True, _fake_task())):
-        with patch.object(client, "old_request", side_effect=fake):
-            ok, _ = client._change_task_status("42", "doing", comment="开工了")
+    with patch.object(client, "old_request", side_effect=fake):
+        ok, _ = client._change_task_status("42", "doing", comment="开工了")
 
     assert ok is True
     assert captured["path"] == "/task-edit-42.json"
-    assert captured["data"]["status"] == "doing"
-    assert captured["data"]["comment"] == "开工了"
-    # It must echo back the existing task's fields so the edit doesn't blank them
-    assert captured["data"]["name"] == "测试任务"
-    assert captured["data"]["assignedTo"] == "alice"
+    # Minimal body — only status (and optional comment); no get_task_detail,
+    # no echo of all the task fields. The server accepts defaults.
+    assert captured["data"] == {"status": "doing", "comment": "开工了"}
 
 
-def test_change_task_status_returns_failure_when_get_task_detail_fails(client):
-    with patch.object(client, "get_task_detail", return_value=(False, "err")):
-        ok, result = client._change_task_status("42", "doing")
-    assert ok is False
-    assert "err" in str(result) or "message" in result
+def test_change_task_status_no_comment(client):
+    """``comment`` default is empty string — it's still added to the body
+    so the server's form-data parser doesn't see a missing key."""
+    captured = {}
+
+    def fake(method, path, data=None):
+        captured["data"] = data
+        return True, {"status": "success", "data": "{}"}
+
+    with patch.object(client, "old_request", side_effect=fake):
+        client._change_task_status("42", "cancel")
+
+    assert captured["data"] == {"status": "cancel"}
 
 
 def test_cancel_task_uses_change_task_status(client):

@@ -83,27 +83,17 @@ class WritesMixin:
     ) -> Tuple[bool, Dict]:
         """共享状态变更后端。
 
-        ``task-edit-{id}.json`` 需要任务现有字段全回传，只换 status。
-        cancel_task / start_task 共用这个模式。
+        Send a minimal body (just ``status`` + optional ``comment``) to
+        ``task-edit-{id}.json``. The server fills in defaults for missing
+        fields. This is the only path that accepts arbitrary status changes
+        (like cancel), so it's used by ``start_task`` and ``cancel_task``.
+
+        Known server quirk: from status=wait, ``task-edit`` rejects
+        ``status=doing`` (its server-side validation requires the previous
+        state to be 'done' for some transitions). The CLI surfaces the
+        server's actual error message in that case.
         """
-        success, task = self.get_task_detail(task_id)
-        if not success:
-            return False, {"message": f"获取任务失败: {task}"}
-        data = {
-            "id": task_id,
-            "parent": task.get("parent", "0"),
-            "project": task.get("project", "0"),
-            "module": task.get("module", "0"),
-            "story": task.get("story", "0"),
-            "name": task.get("name", ""),
-            "type": task.get("type", "devel"),
-            "pri": task.get("pri", "3"),
-            "estimate": task.get("estimate", "0"),
-            "left": task.get("left", "0"),
-            "consumed": task.get("consumed", "0"),
-            "assignedTo": task.get("assignedTo", "admin"),
-            "status": new_status,
-        }
+        data = {"status": new_status}
         if comment:
             data["comment"] = comment
         return self.old_request("POST", f"/task-edit-{task_id}.json", data)

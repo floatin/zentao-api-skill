@@ -332,6 +332,106 @@ def cmd_activate_task(client, args):
     _cmd_task_status(client, args, "激活任务", "activate_task", "已激活")
 
 
+def cmd_assign_task(client, args):
+    """assign_task is the only task-status command with an extra required
+    argument (the new assignee), so it doesn't share the helper above."""
+    info = {"任务 ID": args.task_id, "指派给": args.assigned_to}
+    if args.comment:
+        info["备注"] = args.comment
+    if not _confirm("指派任务", info):
+        print("❌ 操作已取消")
+        return
+    ok, result = client.assign_task(
+        args.task_id, assigned_to=args.assigned_to, comment=args.comment or ""
+    )
+    label = f"✅ 任务 {args.task_id} 已指派给 {args.assigned_to}" if ok else f"❌ 指派失败：{result}"
+    print(label)
+
+
+# ---------- bug status transitions -------------------------------------------
+
+
+def cmd_assign_bug(client, args):
+    if not _confirm("指派 Bug", {"Bug ID": args.bug_id, "指派给": args.assigned_to}):
+        print("❌ 操作已取消")
+        return
+    ok, result = client.assign_bug(
+        args.bug_id, args.assigned_to, comment=args.comment or ""
+    )
+    print(f"✅ Bug {args.bug_id} 已指派给 {args.assigned_to}" if ok else f"❌ 指派失败：{result}")
+
+
+def cmd_confirm_bug(client, args):
+    if not _confirm("确认 Bug", {"Bug ID": args.bug_id}):
+        print("❌ 操作已取消")
+        return
+    ok, result = client.confirm_bug(args.bug_id, comment=args.comment or "")
+    print(f"✅ Bug {args.bug_id} 已确认" if ok else f"❌ 确认失败：{result}")
+
+
+def cmd_resolve_bug(client, args):
+    if not _confirm("解决 Bug", {
+        "Bug ID": args.bug_id,
+        "解决方案": args.resolution,
+        "解决版本": args.build,
+    }):
+        print("❌ 操作已取消")
+        return
+    ok, result = client.resolve_bug(
+        args.bug_id,
+        resolution=args.resolution,
+        resolved_build=args.build,
+        comment=args.comment or "",
+    )
+    print(f"✅ Bug {args.bug_id} 已解决" if ok else f"❌ 解决失败：{result}")
+
+
+def cmd_close_bug(client, args):
+    if not _confirm("关闭 Bug", {"Bug ID": args.bug_id}):
+        print("❌ 操作已取消")
+        return
+    ok, result = client.close_bug(args.bug_id, comment=args.comment or "")
+    print(f"✅ Bug {args.bug_id} 已关闭" if ok else f"❌ 关闭失败：{result}")
+
+
+def cmd_activate_bug(client, args):
+    if not _confirm("激活 Bug", {"Bug ID": args.bug_id}):
+        print("❌ 操作已取消")
+        return
+    ok, result = client.activate_bug(args.bug_id, comment=args.comment or "")
+    print(f"✅ Bug {args.bug_id} 已激活" if ok else f"❌ 激活失败：{result}")
+
+
+# ---------- story status transitions ---------------------------------------
+
+
+def cmd_assign_story(client, args):
+    """assign-story routes through change_story to set the assignedTo field."""
+    if not _confirm("指派需求", {"需求 ID": args.story_id, "指派给": args.assigned_to}):
+        print("❌ 操作已取消")
+        return
+    ok, result = client.change_story(
+        args.story_id, assignedTo=args.assigned_to
+    )
+    print(f"✅ 需求 {args.story_id} 已指派给 {args.assigned_to}" if ok else f"❌ 指派失败：{result}")
+
+
+def cmd_close_story(client, args):
+    if not _confirm("关闭需求", {"需求 ID": args.story_id}):
+        print("❌ 操作已取消")
+        return
+    ok, result = client.close_story(args.story_id)
+    print(f"✅ 需求 {args.story_id} 已关闭" if ok else f"❌ 关闭失败：{result}")
+
+
+def cmd_activate_story(client, args):
+    if not _confirm("激活需求", {"需求 ID": args.story_id}):
+        print("❌ 操作已取消")
+        return
+    ok, result = client.activate_story(args.story_id)
+    print(f"✅ 需求 {args.story_id} 已激活" if ok else f"❌ 激活失败：{result}")
+
+
 # ---------- argparse + dispatch ---------------------------------------------
 
 
@@ -356,6 +456,14 @@ COMMANDS: Dict[str, Callable[[ZenTaoClient, argparse.Namespace], None]] = {
     "cancel-task": cmd_cancel_task,
     "activate-task": cmd_activate_task,
     "assign-task": cmd_assign_task,
+    "assign-bug": cmd_assign_bug,
+    "confirm-bug": cmd_confirm_bug,
+    "resolve-bug": cmd_resolve_bug,
+    "close-bug": cmd_close_bug,
+    "activate-bug": cmd_activate_bug,
+    "assign-story": cmd_assign_story,
+    "close-story": cmd_close_story,
+    "activate-story": cmd_activate_story,
 }
 
 
@@ -438,6 +546,45 @@ def build_parser() -> argparse.ArgumentParser:
     sp.add_argument("--task-id", required=True, help="任务 ID")
     sp.add_argument("--assigned-to", required=True, help="指派给的用户名")
     sp.add_argument("--comment", default="", help="备注（可选）")
+
+    # ----- bug status transitions (5 subcommands) -----
+
+    sp = sub.add_parser("assign-bug", help="指派 Bug")
+    sp.add_argument("--bug-id", required=True, help="Bug ID")
+    sp.add_argument("--assigned-to", required=True, help="指派给的用户名")
+    sp.add_argument("--comment", default="", help="备注（可选）")
+
+    sp = sub.add_parser("confirm-bug", help="确认 Bug")
+    sp.add_argument("--bug-id", required=True)
+    sp.add_argument("--comment", default="")
+
+    sp = sub.add_parser("resolve-bug", help="解决 Bug")
+    sp.add_argument("--bug-id", required=True)
+    sp.add_argument("--resolution", default="fixed",
+                    choices=["fixed", "postponed", "willnotfix", "duplicate", "tostory"],
+                    help="解决方案类型")
+    sp.add_argument("--build", default="trunk", help="解决版本 (默认 trunk)")
+    sp.add_argument("--comment", default="")
+
+    sp = sub.add_parser("close-bug", help="关闭 Bug")
+    sp.add_argument("--bug-id", required=True)
+    sp.add_argument("--comment", default="")
+
+    sp = sub.add_parser("activate-bug", help="激活 Bug")
+    sp.add_argument("--bug-id", required=True)
+    sp.add_argument("--comment", default="")
+
+    # ----- story status transitions (3 subcommands) -----
+
+    sp = sub.add_parser("assign-story", help="指派需求给某人")
+    sp.add_argument("--story-id", required=True, help="需求 ID")
+    sp.add_argument("--assigned-to", required=True, help="指派给的用户名")
+
+    sp = sub.add_parser("close-story", help="关闭需求")
+    sp.add_argument("--story-id", required=True)
+
+    sp = sub.add_parser("activate-story", help="激活需求")
+    sp.add_argument("--story-id", required=True)
 
     return p
 
