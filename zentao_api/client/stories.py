@@ -1,4 +1,5 @@
 from __future__ import annotations
+from datetime import datetime
 from typing import Dict, List, Optional, Tuple, Any
 import json
 
@@ -73,6 +74,10 @@ class StoriesMixin:
             data["module"] = module
         if plan and plan != "0":
             data["plan"] = plan
+        # ponytail: zt_story has no `reviewer` column — reviewer lives in
+        # zt_storyreview and is set via review-story, not at create time.
+        # Silently drop it from the create body regardless of caller intent.
+        kwargs.pop("reviewer", None)
         data.update(kwargs)
 
         # URL: /story-create-{product}-{module}-{story}-{plan}-{execution}-{branch}-{module}-{type}.json
@@ -158,7 +163,7 @@ class StoriesMixin:
         return self.old_request("POST", f"/story-change-{story_id}.json", kwargs)
 
     def review_story(
-        self, story_id: str, result: str, comment: str = ""
+        self, story_id: str, result: str, comment: str = "", reviewed_by: str = ""
     ) -> Tuple[bool, Dict]:
         """评审需求（老 API）
 
@@ -166,6 +171,7 @@ class StoriesMixin:
             story_id: 需求ID
             result: 评审结果 (pass, revert, clarify, reject)
             comment: 评审意见
+            reviewed_by: 评审人账号（默认用当前登录用户）
 
         Returns:
             (success, result)
@@ -176,6 +182,12 @@ class StoriesMixin:
         data = {"result": result}
         if comment:
             data["comment"] = comment
+        # ponytail: zt_storyreview requires reviewedBy + reviewedDate.
+        # Default to the logged-in user so the field is never empty.
+        if not reviewed_by:
+            reviewed_by = self.username
+        data["reviewedBy"] = reviewed_by
+        data["reviewedDate"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         return self.old_request("POST", f"/story-review-{story_id}.json", data)
 
     def get_story_tasks(

@@ -252,7 +252,9 @@ def cmd_review_story(client, args):
     if not _confirm("评审需求", {"需求 ID": args.story_id, "结果": "通过"}):
         print("❌ 操作已取消")
         return
-    success, result = client.review_story(args.story_id)
+    # ponytail: review_story needs result (pass/revert/clarify/reject).
+    # CLI defaults to "pass"; add --result flag later if needed.
+    success, result = client.review_story(args.story_id, "pass")
     print(f"✅ 需求 {args.story_id} 评审通过" if success
           else f"❌ 评审失败：{result}")
 

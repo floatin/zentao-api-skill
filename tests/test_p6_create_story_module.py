@@ -132,5 +132,43 @@ def test_create_story_body_has_required_fields(client):
     # module/plan omitted from body because defaulted to "0"
     assert "module" not in captured["data"]
     assert "plan" not in captured["data"]
-    # reviewer goes through **kwargs
-    assert captured["data"]["reviewer"] == "alice"
+    # reviewer is dropped from the create body — it belongs on
+    # review-story, not on the INSERT into zt_story (no such column).
+    assert "reviewer" not in captured["data"]
+
+
+# ---------- review_story must include reviewedBy + reviewedDate ---------
+
+
+def test_review_story_body_includes_reviewer_and_date(client):
+    captured = {}
+
+    def fake(method, path, data=None):
+        captured["path"] = path
+        captured["data"] = data or {}
+        return True, {"status": "success", "data": '{"result": "success"}'}
+
+    with patch.object(client, "old_request", side_effect=fake):
+        client.review_story("10701", "pass", comment="通过")
+
+    assert captured["path"] == "/story-review-10701.json"
+    assert captured["data"]["result"] == "pass"
+    assert captured["data"]["comment"] == "通过"
+    # reviewedBy defaults to the logged-in user
+    assert captured["data"]["reviewedBy"] == client.username
+    # reviewedDate is current time in ZenTao's format
+    assert "reviewedDate" in captured["data"]
+    assert len(captured["data"]["reviewedDate"]) == 19  # YYYY-MM-DD HH:MM:SS
+
+
+def test_review_story_accepts_explicit_reviewer(client):
+    captured = {}
+
+    def fake(method, path, data=None):
+        captured["data"] = data or {}
+        return True, {"status": "success", "data": '{"result": "success"}'}
+
+    with patch.object(client, "old_request", side_effect=fake):
+        client.review_story("10701", "pass", reviewed_by="alice")
+
+    assert captured["data"]["reviewedBy"] == "alice"
