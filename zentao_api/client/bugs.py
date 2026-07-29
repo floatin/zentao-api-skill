@@ -226,6 +226,8 @@ class BugsMixin:
             "resolvedBuild": resolved_build,
             "comment": comment,
         }
+        if not self.sid:
+            self.get_session()
 
         url = f"{self.old_api_base}/bug-resolve-{bug_id}.html?onlybody=yes"
         response = self.session.post(
@@ -305,6 +307,9 @@ class BugsMixin:
         data = {"assignedTo": assigned_to}
         if comment:
             data["comment"] = comment
+
+        if not self.sid:
+            self.get_session()
 
         url = f"{self.old_api_base}/bug-assignTo-{bug_id}.json"
         response = self.session.post(

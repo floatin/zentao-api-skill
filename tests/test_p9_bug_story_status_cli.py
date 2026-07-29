@@ -177,7 +177,32 @@ def test_story_handler_aborts_on_decline():
     assert "已取消" in buf.getvalue()
 
 
-# ---------- failure path prints message ---------------------------------
+# ---------- session guard on resolve_bug (P9 fix) ---------------------
+
+
+def test_resolve_bug_loads_session_first(client):
+    """P9 fix: resolve_bug bypasses old_request and posts directly; it must
+    ensure ``self.sid`` is loaded first or ``self.session.post`` crashes."""
+    from zentao_api.client.bugs import BugsMixin
+    import inspect
+
+    src = inspect.getsource(BugsMixin.resolve_bug)
+    guard_pos = src.find("if not self.sid:")
+    post_pos = src.find("self.session.post(")
+    assert guard_pos != -1, "resolve_bug missing session guard"
+    assert post_pos != -1
+    assert guard_pos < post_pos
+
+
+def test_assign_bug_loads_session_first(client):
+    from zentao_api.client.bugs import BugsMixin
+    import inspect
+
+    src = inspect.getsource(BugsMixin.assign_bug)
+    guard_pos = src.find("if not self.sid:")
+    post_pos = src.find("self.session.post(")
+    assert guard_pos != -1
+    assert guard_pos < post_pos
 
 
 def test_bug_handler_prints_failure():
