@@ -1,5 +1,6 @@
 .ruff_cache
-lib/__pycache__
+__pycache__/
+*.pyc
 .DS_Store
 .zentao.pytest_cache
 
