@@ -40,6 +40,18 @@ def _confirm(name, details) -> bool:
     return input("确认执行？(y/n): ").strip().lower() in ("y", "yes", "是")
 
 
+def _is_deny(result) -> bool:
+    """Detect user-deny redirects that old_request reports as success."""
+    import json as _json
+    if not isinstance(result, dict):
+        return False
+    try:
+        inner = _json.loads(result.get("data", "{}"))
+    except (ValueError, TypeError):
+        return False
+    return "user-deny" in inner.get("locate", "")
+
+
 def _show_list(client_method: Callable, headers, row_fn, limit=None,
                title=None, fallback=None) -> None:
     """Print a list fetched via ``client_method``. Optionally falls back to
@@ -171,6 +183,72 @@ def cmd_productplans(client, args):
         ["ID", "计划名称"],
         [[p.get("id", ""), p.get("name", "")] for p in plans],
     )
+
+
+# ---------- module (tree) commands -----------------------------------------
+
+
+def cmd_modules(client, args):
+    success, sons = client.list_modules(args.product_id, args.type)
+    if not success:
+        print(f"❌ 查询失败：{sons}")
+        return
+    print(f"✅ 产品 {args.product_id} 共 {len(sons)} 个模块（{args.type}）\n")
+    if not sons:
+        print("无数据")
+        return
+    _print_table(
+        ["ID", "模块名称", "父级 ID", "类型"],
+        [[m.get("id", ""), m.get("name", ""),
+          m.get("parent", ""), m.get("type", "")] for m in sons],
+    )
+
+
+def cmd_create_module(client, args):
+    if not _confirm("新建模块", {
+        "产品 ID": args.product_id,
+        "模块名称": args.name,
+        "类型": args.type,
+        "父级 ID": args.parent,
+    }):
+        print("❌ 操作已取消")
+        return
+    ok, result = client.create_module(
+        args.product_id, args.name, view_type=args.type, parent=args.parent,
+    )
+    if ok and _is_deny(result):
+        ok = False
+        result = "无权限操作"
+    print(f"✅ 模块已创建" if ok else f"❌ 创建失败：{result}")
+
+
+def cmd_edit_module(client, args):
+    if not _confirm("编辑模块", {
+        "模块 ID": args.module_id,
+        "新名称": args.name,
+        "类型": args.type,
+    }):
+        print("❌ 操作已取消")
+        return
+    ok, result = client.edit_module(args.module_id, args.name, view_type=args.type)
+    if ok and _is_deny(result):
+        ok = False
+        result = "无权限操作"
+    print(f"✅ 模块 {args.module_id} 已更新" if ok else f"❌ 更新失败：{result}")
+
+
+def cmd_delete_module(client, args):
+    if not _confirm("删除模块", {
+        "模块 ID": args.module_id,
+        "类型": args.type,
+    }):
+        print("❌ 操作已取消")
+        return
+    ok, result = client.delete_module(args.module_id, view_type=args.type)
+    if ok and _is_deny(result):
+        ok = False
+        result = "无权限操作"
+    print(f"✅ 模块 {args.module_id} 已删除" if ok else f"❌ 删除失败：{result}")
 
 
 def cmd_create_story(client, args):
@@ -471,6 +549,10 @@ COMMANDS: Dict[str, Callable[[ZenTaoClient, argparse.Namespace], None]] = {
     "tasks": cmd_tasks,
     "bugs": cmd_bugs,
     "productplans": cmd_productplans,
+    "modules": cmd_modules,
+    "create-module": cmd_create_module,
+    "edit-module": cmd_edit_module,
+    "delete-module": cmd_delete_module,
     "create-story": cmd_create_story,
     "create-bug": cmd_create_bug,
     "create-task": cmd_create_task,
@@ -528,6 +610,33 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("productplans", help="查询发布计划")
     sp.add_argument("--product-id", required=True, help="产品 ID")
+
+    sp = sub.add_parser("modules", help="查询模块列表")
+    sp.add_argument("--product-id", required=True, help="产品 ID")
+    sp.add_argument("--type", default="story",
+                    choices=["story", "bug", "task"],
+                    help="模块视图类型，默认 story")
+
+    sp = sub.add_parser("create-module", help="新建模块")
+    sp.add_argument("--product-id", required=True, help="产品 ID")
+    sp.add_argument("--name", required=True, help="模块名称")
+    sp.add_argument("--type", default="story",
+                    choices=["story", "bug", "task"],
+                    help="模块类型，默认 story")
+    sp.add_argument("--parent", default="0", help="父模块 ID，默认 0（根级）")
+
+    sp = sub.add_parser("edit-module", help="编辑模块")
+    sp.add_argument("--module-id", required=True, help="模块 ID")
+    sp.add_argument("--name", required=True, help="新名称")
+    sp.add_argument("--type", default="story",
+                    choices=["story", "bug", "task"],
+                    help="模块类型，默认 story")
+
+    sp = sub.add_parser("delete-module", help="删除模块")
+    sp.add_argument("--module-id", required=True, help="模块 ID")
+    sp.add_argument("--type", default="story",
+                    choices=["story", "bug", "task"],
+                    help="模块类型，默认 story")
 
     sp = sub.add_parser("create-story", help="新建需求")
     sp.add_argument("--product-id", required=True)

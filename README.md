@@ -6,7 +6,7 @@
 
 - **轻量**：纯 Python + `requests`，装一个包就能用
 - **凭证外置**：`.env` 文件配置，与代码分离，方便轮转密码
-- **29 个子命令**：7 个只读 + 22 个写操作（4 类工单：需求/任务/Bug/计划）
+- **33 个子命令**：7 个只读 + 22 个写操作 + 4 个模块管理（4 类工单：需求/任务/Bug/计划）
 - **集成 Python 库**：也可作为 `from zentao_api.client import ZenTaoClient` 在代码中使用
 - 148+ 个方法覆盖：产品、项目、需求、任务、Bug、QA 测试、发布、版本、计划
 
@@ -81,11 +81,12 @@ zentao --env-file /path/to/.env products
 zentao --help
 ```
 
-输出 29 个子命令：
+输出 33 个子命令：
 
 ```
 zentao [-h] [--env-file ENV_FILE]
        {products,projects,executions,stories,tasks,bugs,productplans,
+        modules, create-module, edit-module, delete-module,
         create-story, create-bug, create-task, batch-create-tasks,
         create-productplan, review-story,
         start-task, pause-task, restart-task, finish-task, close-task,
@@ -140,7 +141,7 @@ zentao bugs --product-id 35
 zentao productplans --product-id 35
 ```
 
-### 写操作命令（21 个）
+### 写操作命令（22 个）
 
 写操作前会打印操作详情并要求 `y/n` 确认。CI/脚本中可管道 `echo y |` 自动确认。
 
@@ -266,6 +267,33 @@ zentao close-story --story-id 1234
 zentao activate-story --story-id 1234
 ```
 
+#### 模块管理（4 个）
+
+| 命令 | 说明 |
+|---|---|
+| `modules` | 列出产品下的模块（ID / 名称 / 父级） |
+| `create-module` | 新建模块（需要权限） |
+| `edit-module` | 编辑模块名称（需要权限） |
+| `delete-module` | 删除模块（需要权限） |
+
+```bash
+# 列出模块
+zentao modules --product-id 36
+zentao modules --product-id 36 --type bug   # 也支持 task
+
+# 新建模块（写操作需确认）
+zentao create-module --product-id 36 --name "新模块" --type story
+zentao create-module --product-id 36 --name "子模块" --parent 600
+
+# 编辑
+zentao edit-module --module-id 600 --name "改名"
+
+# 删除（会连带删除子模块）
+zentao delete-module --module-id 601
+```
+
+> 写操作需要禅道账号有模块管理权限，否则报 "无权限操作"。`modules` 只读，一般账号即可。
+
 ## 退出码
 
 | 码 | 含义 |
@@ -337,7 +365,7 @@ client.create_bug(
 ys-zentao-api/
 ├── zentao_api/
 │   ├── __init__.py
-│   ├── cli.py                # argparse + 命令字典分发（29 个子命令）
+│   ├── cli.py                # argparse + 命令字典分发（33 个子命令）
 │   └── client/               # 11 个 mixin 组成的包
 │       ├── _base.py          # 鉴权 + old_request + _data helpers
 │       ├── _credentials.py   # .env 读取
@@ -352,7 +380,7 @@ ys-zentao-api/
 │       ├── builds.py         # 版本
 │       ├── plans.py          # 计划
 │       └── writes.py         # 任务状态变更 + get_my_*
-├── tests/                    # 178 个 mock 单元测试
+├── tests/                    # 198 个 mock 单元测试
 ├── .github/workflows/test.yml
 ├── pyproject.toml
 └── README.md
@@ -365,9 +393,9 @@ pip install -e . pytest
 pytest tests/ -v
 ```
 
-178 个 mock 测试覆盖：
+198 个 mock 测试覆盖：
 - 11 个 mixin 的核心方法
-- CLI 29 个子命令的 parser 注册 + dispatch
+- CLI 33 个子命令的 parser 注册 + dispatch
 - `.env` 解析与路径处理
 - 失败 / 取消 / 参数错误各路径
 

@@ -2,6 +2,7 @@ README.md
 pyproject.toml
 tests/test_p0_methods.py
 tests/test_p10_create_module.py
+tests/test_p11_tree_modules.py
 tests/test_p1_package.py
 tests/test_p2_helpers.py
 tests/test_p3_cli.py
@@ -33,4 +34,5 @@ zentao_api/client/qa.py
 zentao_api/client/releases.py
 zentao_api/client/stories.py
 zentao_api/client/tasks.py
+zentao_api/client/tree.py
 zentao_api/client/writes.py

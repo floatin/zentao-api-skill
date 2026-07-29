@@ -13,10 +13,11 @@ from .releases import ReleasesMixin
 from .builds import BuildsMixin
 from .plans import PlansMixin
 from .writes import WritesMixin
+from .tree import TreeMixin
 
 from ._credentials import read_credentials
 
-class ZenTaoClient(BaseClient, LegacyMixin, ProductsMixin, ProjectsMixin, StoriesMixin, TasksMixin, BugsMixin, QAMixin, ReleasesMixin, BuildsMixin, PlansMixin, WritesMixin):
+class ZenTaoClient(BaseClient, LegacyMixin, ProductsMixin, ProjectsMixin, StoriesMixin, TasksMixin, BugsMixin, QAMixin, ReleasesMixin, BuildsMixin, PlansMixin, WritesMixin, TreeMixin):
     """禅道 API 客户端（向后兼容门面，由 mixin 组合而成）。"""
     pass
 
