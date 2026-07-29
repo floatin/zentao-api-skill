@@ -263,6 +263,75 @@ def cmd_review_story(client, args):
           else f"❌ 评审失败：{result}")
 
 
+# ---------- task status transitions ------------------------------------------
+
+
+def _cmd_task_status(client, args, action_zh, method_name, status_label):
+    """Shared handler for the seven task-status CLI commands.
+
+    Each is a thin shim: confirm, call ``client.<method_name>(task_id, ...)``,
+    print the boolean result. The seven callers differ only in which client
+    method they hit and what UI label they display. ``assign_task`` is the
+    only caller that also accepts an ``assigned_to`` argument; it has its
+    own handler (``cmd_assign_task``) below to keep the dispatch explicit
+    rather than guessing from attribute presence.
+    """
+    info = {"任务 ID": args.task_id}
+    if getattr(args, "comment", ""):
+        info["备注"] = args.comment
+    if not _confirm(action_zh, info):
+        print("❌ 操作已取消")
+        return
+    method = getattr(client, method_name)
+    ok, result = method(args.task_id, comment=args.comment or "")
+    label = f"✅ 任务 {args.task_id} {status_label}" if ok else f"❌ {status_label}失败：{result}"
+    print(label)
+
+
+def cmd_assign_task(client, args):
+    """assign_task is the only task-status command with an extra required
+    argument (the new assignee), so it doesn't share the helper above."""
+    info = {"任务 ID": args.task_id, "指派给": args.assigned_to}
+    if args.comment:
+        info["备注"] = args.comment
+    if not _confirm("指派任务", info):
+        print("❌ 操作已取消")
+        return
+    ok, result = client.assign_task(
+        args.task_id, assigned_to=args.assigned_to, comment=args.comment or ""
+    )
+    label = f"✅ 任务 {args.task_id} 已指派给 {args.assigned_to}" if ok else f"❌ 指派失败：{result}"
+    print(label)
+
+
+def cmd_start_task(client, args):
+    _cmd_task_status(client, args, "开始任务", "start_task", "已转为 doing")
+
+
+def cmd_pause_task(client, args):
+    _cmd_task_status(client, args, "暂停任务", "pause_task", "已暂停")
+
+
+def cmd_restart_task(client, args):
+    _cmd_task_status(client, args, "继续任务", "restart_task", "已恢复 doing")
+
+
+def cmd_finish_task(client, args):
+    _cmd_task_status(client, args, "完成任务", "finish_task", "已完成")
+
+
+def cmd_close_task(client, args):
+    _cmd_task_status(client, args, "关闭任务", "close_task", "已关闭")
+
+
+def cmd_cancel_task(client, args):
+    _cmd_task_status(client, args, "取消任务", "cancel_task", "已取消")
+
+
+def cmd_activate_task(client, args):
+    _cmd_task_status(client, args, "激活任务", "activate_task", "已激活")
+
+
 # ---------- argparse + dispatch ---------------------------------------------
 
 
@@ -279,6 +348,14 @@ COMMANDS: Dict[str, Callable[[ZenTaoClient, argparse.Namespace], None]] = {
     "batch-create-tasks": cmd_batch_create_tasks,
     "create-productplan": cmd_create_productplan,
     "review-story": cmd_review_story,
+    "start-task": cmd_start_task,
+    "pause-task": cmd_pause_task,
+    "restart-task": cmd_restart_task,
+    "finish-task": cmd_finish_task,
+    "close-task": cmd_close_task,
+    "cancel-task": cmd_cancel_task,
+    "activate-task": cmd_activate_task,
+    "assign-task": cmd_assign_task,
 }
 
 
@@ -341,6 +418,26 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = sub.add_parser("review-story", help="评审需求")
     sp.add_argument("--story-id", required=True)
+
+    # ----- task status transitions (7 subcommands) -----
+
+    for cmd_name, help_zh in [
+        ("start-task", "开始任务 (wait→doing)"),
+        ("pause-task", "暂停任务 (doing→pause)"),
+        ("restart-task", "继续任务 (pause→doing)"),
+        ("finish-task", "完成任务 (doing→done)"),
+        ("close-task", "关闭任务 (done→closed)"),
+        ("cancel-task", "取消任务 (任意状态→cancel)"),
+        ("activate-task", "激活任务 (done/closed→doing)"),
+    ]:
+        sp = sub.add_parser(cmd_name, help=help_zh)
+        sp.add_argument("--task-id", required=True, help="任务 ID")
+        sp.add_argument("--comment", default="", help="状态变更备注（可选）")
+
+    sp = sub.add_parser("assign-task", help="指派任务")
+    sp.add_argument("--task-id", required=True, help="任务 ID")
+    sp.add_argument("--assigned-to", required=True, help="指派给的用户名")
+    sp.add_argument("--comment", default="", help="备注（可选）")
 
     return p
 

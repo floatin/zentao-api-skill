@@ -354,7 +354,11 @@ class WritesMixin:
             >>> print(f"状态: {task['status']}")  # done
             >>> print(f"完成人: {task['finishedBy']}")
         """
+        if not self.sid:
+            self.get_session()
+
         data = {}
+        data["status"] = "done"
         if comment:
             data["comment"] = comment
 
@@ -394,7 +398,11 @@ class WritesMixin:
             >>> ok, task = client.get_task_detail("17")
             >>> print(f"状态: {task['status']}")  # pause
         """
+        if not self.sid:
+            self.get_session()
+
         data = {}
+        data["status"] = "pause"
         if comment:
             data["comment"] = comment
 
@@ -434,7 +442,11 @@ class WritesMixin:
             >>> ok, task = client.get_task_detail("17")
             >>> print(f"状态: {task['status']}")  # doing
         """
+        if not self.sid:
+            self.get_session()
+
         data = {}
+        data["status"] = "doing"
         if comment:
             data["comment"] = comment
 
@@ -474,7 +486,11 @@ class WritesMixin:
             >>> ok, task = client.get_task_detail("17")
             >>> print(f"状态: {task['status']}")  # doing
         """
+        if not self.sid:
+            self.get_session()
+
         data = {}
+        data["status"] = "doing"
         if comment:
             data["comment"] = comment
 
@@ -513,7 +529,11 @@ class WritesMixin:
             >>> ok, task = client.get_task_detail("17")
             >>> print(f"指派给: {task['assignedTo']}")  # zhangsan
         """
+        if not self.sid:
+            self.get_session()
+
         data = {"assignedTo": assigned_to}
+        data["status"] = "doing"
         if comment:
             data["comment"] = comment
 

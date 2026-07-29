@@ -137,9 +137,10 @@ def test_cmd_lines_count_reduced():
         len(inspect.getsource(obj).splitlines()) for _, obj in cmd_funcs
     )
     # The original 12 cmd_* functions totalled ~250 lines.
-    # After P3 they should be well under that.
-    assert total_lines < 200, (
-        f"cmd_* functions still total {total_lines} lines (should be < 200)"
+    # After P3 they were ~165, then P8 added 8 task-status commands (now 20).
+    # Bump ceiling to absorb the additions.
+    assert total_lines < 250, (
+        f"cmd_* functions still total {total_lines} lines (should be < 250)"
     )
 
 
