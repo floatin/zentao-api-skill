@@ -200,13 +200,16 @@ def test_cli_errors_clearly_when_env_file_missing(tmp_path, capsys, monkeypatch)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setattr(_credentials.Path, "home", lambda: tmp_path)
 
-    rc = cli.main(["products"])
-    assert rc == 1
+    with pytest.raises(SystemExit) as ei:
+        cli.main(["products"])
+    assert ei.value.code == 1
 
     captured = capsys.readouterr()
-    out = captured.out + captured.err
-    assert ".env" in out
-    assert "endpoint" in out or "未找到" in out
+    # error is a JSON envelope on stderr (code-friendly output)
+    import json
+    payload = json.loads(captured.err)
+    assert payload["status"] == "error"
+    assert "endpoint" in str(payload["error"])
 
 
 # ---------- TOOLS.md is no longer referenced --------------------------------

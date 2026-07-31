@@ -18,3 +18,7 @@ dist/
 # Nuitka debug artifacts
 nuitka-crash-report.xml
 zentao_api_skill.egg-info/
+ys_zentao_api.egg-info/
+
+# Local memory/search index
+.memsearch/

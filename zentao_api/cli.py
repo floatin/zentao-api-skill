@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""禅道项目管理命令行工具。"""
+"""禅道项目管理命令行工具。
+
+输出约定（对代码/API 调用友好，参照 baserow-cli）：
+  - stdout: 永远是合法 JSON（数据对象/数组，或带 status 的 envelope）。
+  - stderr: 人类可读日志、确认提示、错误 envelope。
+  - exit code: 0=成功或用户取消, 1=API/网络/认证错误, 2=非交互式拒绝执行。
+"""
 
 import argparse
+import json
 import sys
 from pathlib import Path
 from typing import Callable, Dict, Tuple
@@ -11,68 +18,94 @@ from zentao_api.client import ZenTaoClient, read_credentials
 from zentao_api.client._credentials import default_env_path
 
 
-# ---------- display helpers --------------------------------------------------
+# ---------- output helpers --------------------------------------------------
 
 
-def _print_table(headers, rows):
-    """Render a simple aligned table. Columns sized to header + widest cell."""
-    if not rows:
-        print("无数据")
-        return
-    widths = [len(h) for h in headers]
-    for row in rows:
-        for i, cell in enumerate(row):
-            if i < len(widths):
-                widths[i] = max(widths[i], len(str(cell)))
-    sep = "-+-".join("-" * w for w in widths)
-    print(" | ".join(h.ljust(widths[i]) for i, h in enumerate(headers)))
-    print(sep)
-    for row in rows:
-        print(" | ".join(str(c).ljust(widths[i]) for i, c in enumerate(row)))
+def _jdump(obj) -> None:
+    """Print valid JSON to stdout."""
+    print(json.dumps(obj, ensure_ascii=False, indent=2))
 
 
-def _confirm(name, details) -> bool:
-    print(f"\n⚠️  确认执行操作：{name}")
-    print("-" * 50)
-    for k, v in details.items():
-        print(f"  {k}: {v}")
-    print("-" * 50)
-    return input("确认执行？(y/n): ").strip().lower() in ("y", "yes", "是")
+def _err_exit(data, code: int = 1) -> None:
+    """Print JSON error envelope to stderr and exit non-zero.
+
+    `data` may be a dict (API error body), a string (network/auth message),
+    or any other value — normalized into an `error` field.
+    """
+    if isinstance(data, dict):
+        payload = {"status": "error", "error": data}
+    else:
+        payload = {"status": "error", "error": str(data)}
+    print(json.dumps(payload, ensure_ascii=False), file=sys.stderr)
+    sys.exit(code)
 
 
-def _is_deny(result) -> bool:
-    """Detect user-deny redirects that old_request reports as success."""
+def _deny_to_error(result):
+    """Normalize a user-deny result into an error string, else None."""
     import json as _json
     if not isinstance(result, dict):
-        return False
+        return None
     try:
         inner = _json.loads(result.get("data", "{}"))
     except (ValueError, TypeError):
-        return False
-    return "user-deny" in inner.get("locate", "")
+        return None
+    if "user-deny" in inner.get("locate", ""):
+        return "无权限操作"
+    return None
 
 
-def _show_list(client_method: Callable, headers, row_fn, limit=None,
-               title=None, fallback=None) -> None:
-    """Print a list fetched via ``client_method``. Optionally falls back to
-    ``fallback`` when the primary call returns falsy."""
-    if title:
-        print(f"📋 {title}\n")
+def _confirm(args, name, details) -> bool:
+    """Confirm a destructive action.
+
+    - --yes flag: auto-confirm.
+    - interactive tty: prompt on stderr, read from stdin.
+    - non-interactive without --yes: refuse (exit 2, JSON error on stderr).
+
+    Returns True if confirmed; if user actively cancelled returns False.
+    Never returns False from non-interactive mode — that path exits 2.
+    """
+    if getattr(args, "yes", False):
+        return True
+    if not sys.stdin.isatty():
+        print(
+            json.dumps(
+                {
+                    "status": "error",
+                    "error": (
+                        f"refused to {name}: non-interactive session requires --yes"
+                    ),
+                },
+                ensure_ascii=False,
+            ),
+            file=sys.stderr,
+        )
+        sys.exit(2)
+    print(f"\n⚠️  确认执行操作：{name}", file=sys.stderr)
+    print("-" * 50, file=sys.stderr)
+    for k, v in details.items():
+        print(f"  {k}: {v}", file=sys.stderr)
+    print("-" * 50, file=sys.stderr)
+    sys.stderr.write("确认执行？(y/n): ")
+    sys.stderr.flush()
+    return input().strip().lower() in ("y", "yes", "是")
+
+
+def _fetch_list(client_method: Callable, fallback=None):
+    """Return (data, error). `data` is a list or None; `error` is set on failure.
+
+    A failed primary call (success=False) is reported immediately rather than
+    silently swallowed by the fallback, so API errors stay visible.
+    """
     success, data = client_method()
-    if not (success and isinstance(data, list) and data):
-        if fallback is not None:
-            print("⚠️  主查询失败，尝试回退...\n")
-            success, data = True, fallback() or (False, [])
-            data = data if isinstance(data, list) else []
-        if not data:
-            print("❌ 查询失败")
-            return
-    print(f"✅ 共 {len(data)} 条")
-    if limit and len(data) > limit:
-        print(f"（显示前 {limit} 条）")
-        data = data[:limit]
-    print()
-    _print_table(headers, [row_fn(item) for item in data])
+    if not success:
+        return None, data if isinstance(data, str) else "查询失败"
+    if not isinstance(data, list):
+        return None, "查询失败"
+    if not data and fallback is not None:
+        print("⚠️  主查询为空，尝试回退...", file=sys.stderr)
+        fb = fallback()
+        data = fb if isinstance(fb, list) else []
+    return data, None
 
 
 # ---------- command handlers ------------------------------------------------
@@ -81,108 +114,68 @@ def _show_list(client_method: Callable, headers, row_fn, limit=None,
 def cmd_products(client, args):
     def rows():
         return (client.get_product_list_old() or {}).items()
-    _show_list(
+    data, error = _fetch_list(
         client.get_products,
-        ["ID", "产品名称", "状态", "负责人"],
-        lambda p: [p.get("id", ""), p.get("name", ""),
-                   p.get("status", ""), p.get("owner", "")],
-        title="查询禅道产品列表",
         fallback=lambda: [{"id": pid, "name": n} for n, pid in rows()],
     )
+    if error is not None:
+        _err_exit(error)
+    _jdump(data)
 
 
 def cmd_projects(client, args):
-    _show_list(
+    data, error = _fetch_list(
         lambda: client.get_projects(args.status),
-        ["ID", "项目名称", "状态", "开始", "结束"],
-        lambda p: [p.get("id", ""), p.get("name", ""),
-                   p.get("status", ""), p.get("begin", ""), p.get("end", "")],
-        title=f"查询项目列表（status={args.status}）",
         fallback=lambda: [{"id": pid, "name": n}
                           for pid, n in (client.get_project_list_old() or {}).items()],
     )
+    if error is not None:
+        _err_exit(error)
+    _jdump(data)
+
 
 def cmd_executions(client, args):
     success, executions = client.get_executions(args.project_id)
     if not (success and isinstance(executions, list)):
-        print(f"❌ 查询失败：{executions}")
-        return
-    print(f"✅ 共 {len(executions)} 个执行\n")
-    _print_table(
-        ["ID", "执行名称", "状态", "开始", "结束"],
-        [[e.get("id", ""), e.get("name", ""), e.get("status", ""),
-          e.get("begin", ""), e.get("end", "")] for e in executions],
-    )
+        _err_exit(executions if not success else "查询失败")
+    _jdump(executions)
 
 
 def cmd_stories(client, args):
     success, stories = client.get_stories(args.project_id)
     if not (success and isinstance(stories, list)):
-        print(f"❌ 查询失败：{stories}")
-        return
-    limit = args.limit
-    print(f"✅ 共 {len(stories)} 个需求" + (f"（前 {limit}）" if len(stories) > limit else ""))
-    if limit and len(stories) > limit:
-        stories = stories[:limit]
-    print()
-    _print_table(
-        ["ID", "需求标题", "状态", "优先级", "指派给"],
-        [[s.get("id", ""), str(s.get("title", ""))[:40], s.get("status", ""),
-          s.get("priority", ""), s.get("assignedTo", "")] for s in stories],
-    )
+        _err_exit(stories if not success else "查询失败")
+    if args.limit and len(stories) > args.limit:
+        stories = stories[: args.limit]
+    _jdump(stories)
 
 
 def cmd_tasks(client, args):
     success, tasks = client.get_tasks(args.execution_id)
     if not (success and isinstance(tasks, list)):
-        print(f"❌ 查询失败：{tasks}")
-        return
-    limit = args.limit
-    print(f"✅ 共 {len(tasks)} 个任务" + (f"（前 {limit}）" if len(tasks) > limit else ""))
-    if limit and len(tasks) > limit:
-        tasks = tasks[:limit]
-    print()
-    _print_table(
-        ["ID", "任务名称", "状态", "优先级", "指派给"],
-        [[t.get("id", ""), str(t.get("name", ""))[:40], t.get("status", ""),
-          t.get("priority", ""), t.get("assignedTo", "")] for t in tasks],
-    )
+        _err_exit(tasks if not success else "查询失败")
+    if args.limit and len(tasks) > args.limit:
+        tasks = tasks[: args.limit]
+    _jdump(tasks)
 
 
 def cmd_bugs(client, args):
     success, bugs = client.get_bugs(args.product_id)
     if not (success and isinstance(bugs, list)):
-        print("⚠️  REST 失败，回退到老 API\n")
+        print("⚠️  REST 失败，回退到老 API", file=sys.stderr)
         bugs = client.get_bug_list_old(args.product_id) or []
         if not bugs:
-            print("❌ 查询失败")
-            return
-    limit = args.limit
-    print(f"✅ 共 {len(bugs)} 个缺陷" + (f"（前 {limit}）" if len(bugs) > limit else ""))
-    if limit and len(bugs) > limit:
-        bugs = bugs[:limit]
-    print()
-    _print_table(
-        ["ID", "缺陷标题", "严重程度", "状态", "指派给"],
-        [[b.get("id", ""), str(b.get("title", ""))[:40],
-          b.get("severity", ""), b.get("status", ""), b.get("assignedTo", "")]
-         for b in bugs if isinstance(b, dict)],
-    )
+            _err_exit("查询失败")
+    if args.limit and len(bugs) > args.limit:
+        bugs = bugs[: args.limit]
+    _jdump([b for b in bugs if isinstance(b, dict)])
 
 
 def cmd_productplans(client, args):
     success, plans = client.get_productplans(args.product_id)
     if not (success and isinstance(plans, list)):
-        print(f"❌ 查询失败：{plans}")
-        return
-    print(f"✅ 共 {len(plans)} 个发布计划\n")
-    if not plans:
-        print("无数据")
-        return
-    _print_table(
-        ["ID", "计划名称"],
-        [[p.get("id", ""), p.get("name", "")] for p in plans],
-    )
+        _err_exit(plans if not success else "查询失败")
+    _jdump(plans)
 
 
 # ---------- module (tree) commands -----------------------------------------
@@ -191,68 +184,59 @@ def cmd_productplans(client, args):
 def cmd_modules(client, args):
     success, sons = client.list_modules(args.product_id, args.type)
     if not success:
-        print(f"❌ 查询失败：{sons}")
-        return
-    print(f"✅ 产品 {args.product_id} 共 {len(sons)} 个模块（{args.type}）\n")
-    if not sons:
-        print("无数据")
-        return
-    _print_table(
-        ["ID", "模块名称", "父级 ID", "类型"],
-        [[m.get("id", ""), m.get("name", ""),
-          m.get("parent", ""), m.get("type", "")] for m in sons],
-    )
+        _err_exit(sons)
+    _jdump(sons)
 
 
 def cmd_create_module(client, args):
-    if not _confirm("新建模块", {
+    if not _confirm(args, "新建模块", {
         "产品 ID": args.product_id,
         "模块名称": args.name,
         "类型": args.type,
         "父级 ID": args.parent,
     }):
-        print("❌ 操作已取消")
+        _jdump({"status": "cancelled"})
         return
     ok, result = client.create_module(
         args.product_id, args.name, view_type=args.type, parent=args.parent,
     )
-    if ok and _is_deny(result):
-        ok = False
-        result = "无权限操作"
-    print(f"✅ 模块已创建" if ok else f"❌ 创建失败：{result}")
+    deny = _deny_to_error(result) if ok else None
+    if deny:
+        _err_exit(deny)
+    _jdump({"status": "ok"} if ok else {"status": "error", "error": result})
 
 
 def cmd_edit_module(client, args):
-    if not _confirm("编辑模块", {
+    if not _confirm(args, "编辑模块", {
         "模块 ID": args.module_id,
         "新名称": args.name,
         "类型": args.type,
     }):
-        print("❌ 操作已取消")
+        _jdump({"status": "cancelled"})
         return
     ok, result = client.edit_module(args.module_id, args.name, view_type=args.type)
-    if ok and _is_deny(result):
-        ok = False
-        result = "无权限操作"
-    print(f"✅ 模块 {args.module_id} 已更新" if ok else f"❌ 更新失败：{result}")
+    deny = _deny_to_error(result) if ok else None
+    if deny:
+        _err_exit(deny)
+    _jdump({"status": "ok"} if ok else {"status": "error", "error": result})
 
 
 def cmd_delete_module(client, args):
-    if not _confirm("删除模块", {
+    if not _confirm(args, "删除模块", {
         "模块 ID": args.module_id,
         "类型": args.type,
     }):
-        print("❌ 操作已取消")
+        _jdump({"status": "cancelled"})
         return
     ok, result = client.delete_module(args.module_id, view_type=args.type)
-    if ok and _is_deny(result):
-        ok = False
-        result = "无权限操作"
-    print(f"✅ 模块 {args.module_id} 已删除" if ok else f"❌ 删除失败：{result}")
+    deny = _deny_to_error(result) if ok else None
+    if deny:
+        _err_exit(deny)
+    _jdump({"status": "ok"} if ok else {"status": "error", "error": result})
 
 
 def cmd_create_story(client, args):
-    if not _confirm("新建需求", {
+    if not _confirm(args, "新建需求", {
         "产品 ID": args.product_id,
         "执行 ID": args.execution_id,
         "模块": args.module,
@@ -260,7 +244,7 @@ def cmd_create_story(client, args):
         "计划 ID": args.plan_id,
         "评审人": args.reviewer or "默认",
     }):
-        print("❌ 操作已取消")
+        _jdump({"status": "cancelled"})
         return
     success, result = client.create_story(
         product_id=args.product_id,
@@ -270,8 +254,8 @@ def cmd_create_story(client, args):
         plan=args.plan_id,
         reviewer=args.reviewer,
     )
-    print(f"✅ 新建成功，需求 ID: {result.get('id', '未知')}" if success
-          else f"❌ 新建失败：{result}")
+    _jdump({"status": "ok", "id": result.get("id")} if success
+          else {"status": "error", "error": result})
 
 
 def cmd_create_bug(client, args):
@@ -284,8 +268,8 @@ def cmd_create_bug(client, args):
     }
     if args.project_id:
         info["项目 ID"] = args.project_id
-    if not _confirm("新建 Bug", info):
-        print("❌ 操作已取消")
+    if not _confirm(args, "新建 Bug", info):
+        _jdump({"status": "cancelled"})
         return
     success, result = client.create_bug(
         product_id=args.product_id,
@@ -296,8 +280,8 @@ def cmd_create_bug(client, args):
         project_id=args.project_id or None,
         assignedTo=args.assigned_to or None,
     )
-    print(f"✅ 新建成功，Bug ID: {result.get('id', '未知')}" if success
-          else f"❌ 新建失败：{result}")
+    _jdump({"status": "ok", "id": result.get("id")} if success
+          else {"status": "error", "error": result})
 
 
 def cmd_create_task(client, args):
@@ -305,8 +289,8 @@ def cmd_create_task(client, args):
             "任务名称": args.name, "指派给": args.assign_to}
     if args.parent_id:
         info["父任务 ID"] = args.parent_id
-    if not _confirm("新建任务", info):
-        print("❌ 操作已取消")
+    if not _confirm(args, "新建任务", info):
+        _jdump({"status": "cancelled"})
         return
     success, result = client.create_task(
         project=args.execution_id,
@@ -316,8 +300,8 @@ def cmd_create_task(client, args):
         module="0",
         parent=args.parent_id,
     )
-    print(f"✅ 新建成功，任务 ID: {result.get('id', '未知')}" if success
-          else f"❌ 新建失败：{result}")
+    _jdump({"status": "ok", "id": result.get("id")} if success
+          else {"status": "error", "error": result})
 
 
 def cmd_batch_create_tasks(client, args):
@@ -331,42 +315,41 @@ def cmd_batch_create_tasks(client, args):
             t["estimate"] = parts[1].strip()
         tasks.append(t)
     if not tasks:
-        print("❌ 未提供有效的任务信息")
-        return
-    if not _confirm("批量创建子任务", {
+        _err_exit("未提供有效的任务信息")
+    if not _confirm(args, "批量创建子任务", {
         "执行 ID": args.execution_id, "父任务 ID": args.parent_id,
         "任务数量": len(tasks),
         "任务列表": ", ".join(f"{t['name']}({t.get('estimate', '?')}h)" for t in tasks),
     }):
-        print("❌ 操作已取消")
+        _jdump({"status": "cancelled"})
         return
     success, result = client.batch_create_tasks(
         args.execution_id, args.parent_id, tasks,
     )
-    print(f"✅ {result.get('message', '创建成功')}" if success
-          else f"❌ 创建失败：{result}")
+    _jdump({"status": "ok", "message": result.get("message", "创建成功")} if success
+          else {"status": "error", "error": result})
 
 
 def cmd_create_productplan(client, args):
-    if not _confirm("新建发布计划", {
+    if not _confirm(args, "新建发布计划", {
         "产品 ID": args.product_id, "计划名称": args.title,
     }):
-        print("❌ 操作已取消")
+        _jdump({"status": "cancelled"})
         return
     success, result = client.create_productplan(args.product_id, args.title)
-    print(f"✅ 新建成功，计划 ID: {result.get('id', '未知')}" if success
-          else f"❌ 新建失败：{result}")
+    _jdump({"status": "ok", "id": result.get("id")} if success
+          else {"status": "error", "error": result})
 
 
 def cmd_review_story(client, args):
-    if not _confirm("评审需求", {"需求 ID": args.story_id, "结果": "通过"}):
-        print("❌ 操作已取消")
+    if not _confirm(args, "评审需求", {"需求 ID": args.story_id, "结果": "通过"}):
+        _jdump({"status": "cancelled"})
         return
     # ponytail: review_story needs result (pass/revert/clarify/reject).
     # CLI defaults to "pass"; add --result flag later if needed.
     success, result = client.review_story(args.story_id, "pass")
-    print(f"✅ 需求 {args.story_id} 评审通过" if success
-          else f"❌ 评审失败：{result}")
+    _jdump({"status": "ok", "story_id": args.story_id} if success
+          else {"status": "error", "error": result})
 
 
 # ---------- task status transitions ------------------------------------------
@@ -376,22 +359,18 @@ def _cmd_task_status(client, args, action_zh, method_name, status_label):
     """Shared handler for the seven task-status CLI commands.
 
     Each is a thin shim: confirm, call ``client.<method_name>(task_id, ...)``,
-    print the boolean result. The seven callers differ only in which client
-    method they hit and what UI label they display. ``assign_task`` is the
-    only caller that also accepts an ``assigned_to`` argument; it has its
-    own handler (``cmd_assign_task``) below to keep the dispatch explicit
-    rather than guessing from attribute presence.
+    print a JSON result.
     """
     info = {"任务 ID": args.task_id}
     if getattr(args, "comment", ""):
         info["备注"] = args.comment
-    if not _confirm(action_zh, info):
-        print("❌ 操作已取消")
+    if not _confirm(args, action_zh, info):
+        _jdump({"status": "cancelled"})
         return
     method = getattr(client, method_name)
     ok, result = method(args.task_id, comment=args.comment or "")
-    label = f"✅ 任务 {args.task_id} {status_label}" if ok else f"❌ {status_label}失败：{result}"
-    print(label)
+    _jdump({"status": "ok", "task_id": args.task_id, "state": status_label} if ok
+          else {"status": "error", "error": result})
 
 
 def cmd_assign_task(client, args):
@@ -400,88 +379,90 @@ def cmd_assign_task(client, args):
     info = {"任务 ID": args.task_id, "指派给": args.assigned_to}
     if args.comment:
         info["备注"] = args.comment
-    if not _confirm("指派任务", info):
-        print("❌ 操作已取消")
+    if not _confirm(args, "指派任务", info):
+        _jdump({"status": "cancelled"})
         return
     ok, result = client.assign_task(
         args.task_id, assigned_to=args.assigned_to, comment=args.comment or ""
     )
-    label = f"✅ 任务 {args.task_id} 已指派给 {args.assigned_to}" if ok else f"❌ 指派失败：{result}"
-    print(label)
+    _jdump({"status": "ok", "task_id": args.task_id, "assigned_to": args.assigned_to} if ok
+          else {"status": "error", "error": result})
 
 
 def cmd_start_task(client, args):
-    _cmd_task_status(client, args, "开始任务", "start_task", "已转为 doing")
+    _cmd_task_status(client, args, "开始任务", "start_task", "doing")
 
 
 def cmd_pause_task(client, args):
-    _cmd_task_status(client, args, "暂停任务", "pause_task", "已暂停")
+    _cmd_task_status(client, args, "暂停任务", "pause_task", "pause")
 
 
 def cmd_restart_task(client, args):
-    _cmd_task_status(client, args, "继续任务", "restart_task", "已恢复 doing")
+    _cmd_task_status(client, args, "继续任务", "restart_task", "doing")
 
 
 def cmd_finish_task(client, args):
-    _cmd_task_status(client, args, "完成任务", "finish_task", "已完成")
+    _cmd_task_status(client, args, "完成任务", "finish_task", "done")
 
 
 def cmd_close_task(client, args):
-    _cmd_task_status(client, args, "关闭任务", "close_task", "已关闭")
+    _cmd_task_status(client, args, "关闭任务", "close_task", "closed")
 
 
 def cmd_cancel_task(client, args):
-    _cmd_task_status(client, args, "取消任务", "cancel_task", "已取消")
+    _cmd_task_status(client, args, "取消任务", "cancel_task", "cancel")
 
 
 def cmd_activate_task(client, args):
-    _cmd_task_status(client, args, "激活任务", "activate_task", "已激活")
+    _cmd_task_status(client, args, "激活任务", "activate_task", "doing")
 
 
-def cmd_assign_task(client, args):
+def cmd_assign_task(client, args):  # noqa: F811  (deliberate redefinition kept)
     """assign_task is the only task-status command with an extra required
     argument (the new assignee), so it doesn't share the helper above."""
     info = {"任务 ID": args.task_id, "指派给": args.assigned_to}
     if args.comment:
         info["备注"] = args.comment
-    if not _confirm("指派任务", info):
-        print("❌ 操作已取消")
+    if not _confirm(args, "指派任务", info):
+        _jdump({"status": "cancelled"})
         return
     ok, result = client.assign_task(
         args.task_id, assigned_to=args.assigned_to, comment=args.comment or ""
     )
-    label = f"✅ 任务 {args.task_id} 已指派给 {args.assigned_to}" if ok else f"❌ 指派失败：{result}"
-    print(label)
+    _jdump({"status": "ok", "task_id": args.task_id, "assigned_to": args.assigned_to} if ok
+          else {"status": "error", "error": result})
 
 
 # ---------- bug status transitions -------------------------------------------
 
 
 def cmd_assign_bug(client, args):
-    if not _confirm("指派 Bug", {"Bug ID": args.bug_id, "指派给": args.assigned_to}):
-        print("❌ 操作已取消")
+    if not _confirm(args, "指派 Bug", {"Bug ID": args.bug_id, "指派给": args.assigned_to}):
+        _jdump({"status": "cancelled"})
         return
     ok, result = client.assign_bug(
         args.bug_id, args.assigned_to, comment=args.comment or ""
     )
-    print(f"✅ Bug {args.bug_id} 已指派给 {args.assigned_to}" if ok else f"❌ 指派失败：{result}")
+    _jdump({"status": "ok", "bug_id": args.bug_id, "assigned_to": args.assigned_to} if ok
+          else {"status": "error", "error": result})
 
 
 def cmd_confirm_bug(client, args):
-    if not _confirm("确认 Bug", {"Bug ID": args.bug_id}):
-        print("❌ 操作已取消")
+    if not _confirm(args, "确认 Bug", {"Bug ID": args.bug_id}):
+        _jdump({"status": "cancelled"})
         return
     ok, result = client.confirm_bug(args.bug_id, comment=args.comment or "")
-    print(f"✅ Bug {args.bug_id} 已确认" if ok else f"❌ 确认失败：{result}")
+    _jdump({"status": "ok", "bug_id": args.bug_id} if ok
+          else {"status": "error", "error": result})
 
 
 def cmd_resolve_bug(client, args):
-    if not _confirm("解决 Bug", {
+    if not _confirm(args, "解决 Bug", {
         "Bug ID": args.bug_id,
         "解决方案": args.resolution,
         "解决版本": args.build,
     }):
-        print("❌ 操作已取消")
+        _jdump({"status": "cancelled"})
         return
     ok, result = client.resolve_bug(
         args.bug_id,
@@ -489,23 +470,26 @@ def cmd_resolve_bug(client, args):
         resolved_build=args.build,
         comment=args.comment or "",
     )
-    print(f"✅ Bug {args.bug_id} 已解决" if ok else f"❌ 解决失败：{result}")
+    _jdump({"status": "ok", "bug_id": args.bug_id, "resolution": args.resolution} if ok
+          else {"status": "error", "error": result})
 
 
 def cmd_close_bug(client, args):
-    if not _confirm("关闭 Bug", {"Bug ID": args.bug_id}):
-        print("❌ 操作已取消")
+    if not _confirm(args, "关闭 Bug", {"Bug ID": args.bug_id}):
+        _jdump({"status": "cancelled"})
         return
     ok, result = client.close_bug(args.bug_id, comment=args.comment or "")
-    print(f"✅ Bug {args.bug_id} 已关闭" if ok else f"❌ 关闭失败：{result}")
+    _jdump({"status": "ok", "bug_id": args.bug_id} if ok
+          else {"status": "error", "error": result})
 
 
 def cmd_activate_bug(client, args):
-    if not _confirm("激活 Bug", {"Bug ID": args.bug_id}):
-        print("❌ 操作已取消")
+    if not _confirm(args, "激活 Bug", {"Bug ID": args.bug_id}):
+        _jdump({"status": "cancelled"})
         return
     ok, result = client.activate_bug(args.bug_id, comment=args.comment or "")
-    print(f"✅ Bug {args.bug_id} 已激活" if ok else f"❌ 激活失败：{result}")
+    _jdump({"status": "ok", "bug_id": args.bug_id} if ok
+          else {"status": "error", "error": result})
 
 
 # ---------- story status transitions ---------------------------------------
@@ -513,29 +497,32 @@ def cmd_activate_bug(client, args):
 
 def cmd_assign_story(client, args):
     """assign-story routes through change_story to set the assignedTo field."""
-    if not _confirm("指派需求", {"需求 ID": args.story_id, "指派给": args.assigned_to}):
-        print("❌ 操作已取消")
+    if not _confirm(args, "指派需求", {"需求 ID": args.story_id, "指派给": args.assigned_to}):
+        _jdump({"status": "cancelled"})
         return
     ok, result = client.change_story(
         args.story_id, assignedTo=args.assigned_to
     )
-    print(f"✅ 需求 {args.story_id} 已指派给 {args.assigned_to}" if ok else f"❌ 指派失败：{result}")
+    _jdump({"status": "ok", "story_id": args.story_id, "assigned_to": args.assigned_to} if ok
+          else {"status": "error", "error": result})
 
 
 def cmd_close_story(client, args):
-    if not _confirm("关闭需求", {"需求 ID": args.story_id}):
-        print("❌ 操作已取消")
+    if not _confirm(args, "关闭需求", {"需求 ID": args.story_id}):
+        _jdump({"status": "cancelled"})
         return
     ok, result = client.close_story(args.story_id)
-    print(f"✅ 需求 {args.story_id} 已关闭" if ok else f"❌ 关闭失败：{result}")
+    _jdump({"status": "ok", "story_id": args.story_id} if ok
+          else {"status": "error", "error": result})
 
 
 def cmd_activate_story(client, args):
-    if not _confirm("激活需求", {"需求 ID": args.story_id}):
-        print("❌ 操作已取消")
+    if not _confirm(args, "激活需求", {"需求 ID": args.story_id}):
+        _jdump({"status": "cancelled"})
         return
     ok, result = client.activate_story(args.story_id)
-    print(f"✅ 需求 {args.story_id} 已激活" if ok else f"❌ 激活失败：{result}")
+    _jdump({"status": "ok", "story_id": args.story_id} if ok
+          else {"status": "error", "error": result})
 
 
 # ---------- argparse + dispatch ---------------------------------------------
@@ -585,6 +572,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=None,
         help=f".env 凭证文件路径，默认 {default_env_path()}",
+    )
+    p.add_argument(
+        "-y", "--yes",
+        action="store_true",
+        help="对所有破坏性操作自动确认 (适合 CI/脚本)",
     )
     sub = p.add_subparsers(dest="command", required=True)
 
@@ -745,13 +737,14 @@ def main(argv=None) -> int:
     env_path = args.env_file if args.env_file is not None else default_env_path()
     credentials = read_credentials(env_path)
     if not credentials:
-        print(f"❌ 未找到凭证文件：{env_path}", file=sys.stderr)
-        print()
-        print("请创建该文件，格式：", file=sys.stderr)
-        print("  endpoint=http://your-zentao-host", file=sys.stderr)
-        print("  username=your-username", file=sys.stderr)
-        print("  password=your-password", file=sys.stderr)
-        return 1
+        _err_exit(
+            {
+                "missing": ["endpoint", "username", "password"],
+                "config_path": str(env_path),
+                "hint": "创建该文件, 格式: endpoint=... / username=... / password=...",
+            },
+            code=1,
+        )
 
     client = ZenTaoClient(
         credentials["endpoint"],

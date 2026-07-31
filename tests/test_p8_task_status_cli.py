@@ -80,11 +80,11 @@ def test_assign_command_in_dispatch_dict():
 def test_status_handler_dispatches_and_prints_success(
     cmd_name, method_name, status_label_substr
 ):
-    """Auto-confirm the prompt, mock the client method, expect success label."""
+    """Auto-confirm the prompt, mock the client method, expect JSON ok envelope."""
     mock_client = MagicMock()
     getattr(mock_client, method_name).return_value = (True, {"id": "29653"})
 
-    args = MagicMock(task_id="29653", comment="")
+    args = MagicMock(task_id="29653", comment="", yes=False)
 
     with patch("zentao_api.cli._confirm", return_value=True):
         buf = io.StringIO()
@@ -94,7 +94,10 @@ def test_status_handler_dispatches_and_prints_success(
     getattr(mock_client, method_name).assert_called_once_with(
         "29653", comment=""
     )
-    assert status_label_substr in buf.getvalue()
+    import json
+    payload = json.loads(buf.getvalue())
+    assert payload["status"] == "ok"
+    assert payload["task_id"] == "29653"
 
 
 def test_assign_task_handler_passes_assigned_to():
@@ -124,7 +127,8 @@ def test_handler_aborts_when_user_declines():
             cli.COMMANDS["start-task"](mock_client, args)
 
     mock_client.start_task.assert_not_called()
-    assert "已取消" in buf.getvalue()
+    import json
+    assert json.loads(buf.getvalue())["status"] == "cancelled"
 
 
 # ---------- failure path prints the server message -----------------------
@@ -134,15 +138,17 @@ def test_handler_prints_failure_message():
     mock_client = MagicMock()
     mock_client.start_task.return_value = (False, {"message": "任务不存在"})
 
-    args = MagicMock(task_id="999", comment="")
+    args = MagicMock(task_id="999", comment="", yes=False)
 
     with patch("zentao_api.cli._confirm", return_value=True):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             cli.COMMANDS["start-task"](mock_client, args)
 
-    assert "失败" in buf.getvalue()
-    assert "任务不存在" in buf.getvalue()
+    import json
+    payload = json.loads(buf.getvalue())
+    assert payload["status"] == "error"
+    assert "任务不存在" in str(payload["error"])
 
 
 # ---------- session-direct client methods auto-load session -------------

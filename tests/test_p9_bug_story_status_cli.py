@@ -73,7 +73,7 @@ def test_bug_handler_dispatches_and_prints_success(
     mock_client = MagicMock()
     getattr(mock_client, method_name).return_value = (True, {"id": "100"})
 
-    args = MagicMock(bug_id="100", comment="", assigned_to="alice")
+    args = MagicMock(bug_id="100", comment="", assigned_to="alice", yes=False)
 
     with patch("zentao_api.cli._confirm", return_value=True):
         buf = io.StringIO()
@@ -81,7 +81,10 @@ def test_bug_handler_dispatches_and_prints_success(
             cli.COMMANDS[cmd_name](mock_client, args)
 
     getattr(mock_client, method_name).assert_called_once()
-    assert success_label_substr in buf.getvalue()
+    import json
+    payload = json.loads(buf.getvalue())
+    assert payload["status"] == "ok"
+    assert payload["bug_id"] == "100"
 
 
 def test_resolve_bug_passes_resolution_and_build():
@@ -124,7 +127,7 @@ def test_story_simple_handler_dispatches(cmd_name, method_name, success_label_su
     mock_client = MagicMock()
     getattr(mock_client, method_name).return_value = (True, {"id": "100"})
 
-    args = MagicMock(story_id="100")
+    args = MagicMock(story_id="100", yes=False)
 
     with patch("zentao_api.cli._confirm", return_value=True):
         buf = io.StringIO()
@@ -132,7 +135,10 @@ def test_story_simple_handler_dispatches(cmd_name, method_name, success_label_su
             cli.COMMANDS[cmd_name](mock_client, args)
 
     getattr(mock_client, method_name).assert_called_once_with("100")
-    assert success_label_substr in buf.getvalue()
+    import json
+    payload = json.loads(buf.getvalue())
+    assert payload["status"] == "ok"
+    assert payload["story_id"] == "100"
 
 
 def test_assign_story_routes_through_change_story():
@@ -153,7 +159,7 @@ def test_assign_story_routes_through_change_story():
 
 def test_bug_handler_aborts_on_decline():
     mock_client = MagicMock()
-    args = MagicMock(bug_id="100", comment="")
+    args = MagicMock(bug_id="100", comment="", yes=False)
 
     with patch("zentao_api.cli._confirm", return_value=False):
         buf = io.StringIO()
@@ -161,12 +167,13 @@ def test_bug_handler_aborts_on_decline():
             cli.COMMANDS["close-bug"](mock_client, args)
 
     mock_client.close_bug.assert_not_called()
-    assert "已取消" in buf.getvalue()
+    import json
+    assert json.loads(buf.getvalue())["status"] == "cancelled"
 
 
 def test_story_handler_aborts_on_decline():
     mock_client = MagicMock()
-    args = MagicMock(story_id="100")
+    args = MagicMock(story_id="100", yes=False)
 
     with patch("zentao_api.cli._confirm", return_value=False):
         buf = io.StringIO()
@@ -174,7 +181,8 @@ def test_story_handler_aborts_on_decline():
             cli.COMMANDS["activate-story"](mock_client, args)
 
     mock_client.activate_story.assert_not_called()
-    assert "已取消" in buf.getvalue()
+    import json
+    assert json.loads(buf.getvalue())["status"] == "cancelled"
 
 
 # ---------- session guard on resolve_bug (P9 fix) ---------------------
@@ -208,26 +216,30 @@ def test_assign_bug_loads_session_first(client):
 def test_bug_handler_prints_failure():
     mock_client = MagicMock()
     mock_client.close_bug.return_value = (False, {"message": "权限不足"})
-    args = MagicMock(bug_id="100", comment="")
+    args = MagicMock(bug_id="100", comment="", yes=False)
 
     with patch("zentao_api.cli._confirm", return_value=True):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             cli.COMMANDS["close-bug"](mock_client, args)
 
-    assert "失败" in buf.getvalue()
-    assert "权限不足" in buf.getvalue()
+    import json
+    payload = json.loads(buf.getvalue())
+    assert payload["status"] == "error"
+    assert "权限不足" in str(payload["error"])
 
 
 def test_story_handler_prints_failure():
     mock_client = MagicMock()
     mock_client.activate_story.return_value = (False, {"message": "需求已关闭"})
-    args = MagicMock(story_id="100")
+    args = MagicMock(story_id="100", yes=False)
 
     with patch("zentao_api.cli._confirm", return_value=True):
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             cli.COMMANDS["activate-story"](mock_client, args)
 
-    assert "失败" in buf.getvalue()
-    assert "需求已关闭" in buf.getvalue()
+    import json
+    payload = json.loads(buf.getvalue())
+    assert payload["status"] == "error"
+    assert "需求已关闭" in str(payload["error"])

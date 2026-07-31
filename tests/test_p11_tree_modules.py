@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import io
 import contextlib
+import json
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -158,10 +159,10 @@ def test_cli_modules_handler_prints_table():
     buf = io.StringIO()
     with contextlib.redirect_stdout(buf):
         cli.COMMANDS["modules"](mock_client, args)
-    out = buf.getvalue()
-    assert "✅" in out
-    assert "模块1" in out
-    assert "模块2" in out
+    payload = json.loads(buf.getvalue())
+    assert len(payload) == 2
+    assert payload[0]["name"] == "模块1"
+    assert payload[1]["name"] == "模块2"
 
 
 def test_cli_modules_handler_failure():
@@ -169,10 +170,9 @@ def test_cli_modules_handler_failure():
     mock_client = MagicMock()
     mock_client.list_modules.return_value = (False, "no permission")
     args = MagicMock(product_id="99", type="story")
-    buf = io.StringIO()
-    with contextlib.redirect_stdout(buf):
+    with pytest.raises(SystemExit) as ei:
         cli.COMMANDS["modules"](mock_client, args)
-    assert "❌" in buf.getvalue()
+    assert ei.value.code == 1
 
 
 # ---------- CLI: create-module ---------------------------------------------
@@ -210,7 +210,7 @@ def test_cli_create_module_handler():
     mock_client.create_module.assert_called_once_with(
         "36", "新模块", view_type="story", parent="0",
     )
-    assert "✅" in buf.getvalue()
+    assert json.loads(buf.getvalue())["status"] == "ok"
 
 
 def test_cli_create_module_abort():
@@ -226,7 +226,7 @@ def test_cli_create_module_abort():
         with patch("zentao_api.cli._confirm", return_value=False):
             cli.COMMANDS["create-module"](mock_client, args)
     mock_client.create_module.assert_not_called()
-    assert "已取消" in buf.getvalue()
+    assert json.loads(buf.getvalue())["status"] == "cancelled"
 
 
 # ---------- CLI: edit-module -----------------------------------------------
@@ -250,7 +250,7 @@ def test_cli_edit_module_handler():
         with patch("zentao_api.cli._confirm", return_value=True):
             cli.COMMANDS["edit-module"](mock_client, args)
     mock_client.edit_module.assert_called_once_with("600", "改名", view_type="story")
-    assert "✅" in buf.getvalue()
+    assert json.loads(buf.getvalue())["status"] == "ok"
 
 
 # ---------- CLI: delete-module ---------------------------------------------
@@ -271,4 +271,4 @@ def test_cli_delete_module_handler():
         with patch("zentao_api.cli._confirm", return_value=True):
             cli.COMMANDS["delete-module"](mock_client, args)
     mock_client.delete_module.assert_called_once_with("600", view_type="story")
-    assert "✅" in buf.getvalue()
+    assert json.loads(buf.getvalue())["status"] == "ok"

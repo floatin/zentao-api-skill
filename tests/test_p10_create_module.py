@@ -168,7 +168,8 @@ def test_cli_create_bug_handler_calls_client():
     mock_client.create_bug.assert_called_once()
     call_kwargs = mock_client.create_bug.call_args
     assert call_kwargs[1]["module"] == "[模块1]"
-    assert "✅" in buf.getvalue()
+    import json
+    assert json.loads(buf.getvalue())["status"] == "ok"
 
 
 def test_cli_create_bug_aborts_on_decline():
@@ -186,7 +187,8 @@ def test_cli_create_bug_aborts_on_decline():
             cli.COMMANDS["create-bug"](mock_client, args)
 
     mock_client.create_bug.assert_not_called()
-    assert "已取消" in buf.getvalue()
+    import json
+    assert json.loads(buf.getvalue())["status"] == "cancelled"
 
 
 def test_cli_create_story_handler_passes_module():
